@@ -4,7 +4,7 @@
 
 **AIエージェントの2回の実行間の振る舞いをdiffする。**
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![npm](https://img.shields.io/npm/v/whatbroke-cli)](https://www.npmjs.com/package/whatbroke-cli) [![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md) · [हिन्दी](README.hi.md)
 
@@ -21,13 +21,13 @@
 ## インストール
 
 ```
-npm install -g whatbroke
+npm install -g whatbroke-cli
 ```
 
 または直接実行:
 
 ```
-npx whatbroke diff before.jsonl after.jsonl
+npx whatbroke-cli diff before.jsonl after.jsonl
 ```
 
 同梱のサンプルtraceで今すぐ試せます:
@@ -57,7 +57,7 @@ breakingが出ると終了コードは1になるので、そのままCIに入れ
 
 ```yaml
 - run: node run-agent-suite.js --out traces/current.jsonl
-- run: npx whatbroke diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
+- run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
 もっと厳しくしたいなら `--fail-on warning`、レポートだけ欲しいなら `--fail-on never`。

@@ -4,7 +4,7 @@
 
 **对比你的 AI Agent 在两次运行之间的行为差异。**
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![npm](https://img.shields.io/npm/v/whatbroke-cli)](https://www.npmjs.com/package/whatbroke-cli) [![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md) · [हिन्दी](README.hi.md)
 
@@ -21,13 +21,13 @@
 ## 安装
 
 ```
-npm install -g whatbroke
+npm install -g whatbroke-cli
 ```
 
 或者直接运行：
 
 ```
-npx whatbroke diff before.jsonl after.jsonl
+npx whatbroke-cli diff before.jsonl after.jsonl
 ```
 
 现在就可以用仓库自带的示例 trace 试一下：
@@ -57,7 +57,7 @@ whatbroke 按 id 对齐每次运行，在运行内部对齐工具调用，然后
 
 ```yaml
 - run: node run-agent-suite.js --out traces/current.jsonl
-- run: npx whatbroke diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
+- run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
 想更严格就用 `--fail-on warning`，只想看报告就用 `--fail-on never`。

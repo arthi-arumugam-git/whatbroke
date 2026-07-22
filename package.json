@@ -1,5 +1,5 @@
 {
-  "name": "whatbroke",
+  "name": "whatbroke-cli",
   "version": "0.2.0",
   "description": "Diff your AI agent's behavior between two runs. Swap a model, change a prompt, run whatbroke, see exactly what changed.",
   "keywords": [
@@ -25,7 +25,7 @@
   "sideEffects": false,
   "type": "module",
   "bin": {
-    "whatbroke": "./dist/cli.js"
+    "whatbroke": "dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

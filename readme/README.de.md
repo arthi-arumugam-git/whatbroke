@@ -4,7 +4,7 @@
 
 **Vergleiche das Verhalten deines KI-Agenten zwischen zwei Läufen.**
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![npm](https://img.shields.io/npm/v/whatbroke-cli)](https://www.npmjs.com/package/whatbroke-cli) [![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md) · [हिन्दी](README.hi.md)
 
@@ -21,13 +21,13 @@ Das ist ein echter Ausfall nach dem Wechsel auf ein günstigeres Modell. Der Age
 ## Installation
 
 ```
-npm install -g whatbroke
+npm install -g whatbroke-cli
 ```
 
 Oder direkt ausführen:
 
 ```
-npx whatbroke diff before.jsonl after.jsonl
+npx whatbroke-cli diff before.jsonl after.jsonl
 ```
 
 Probier es sofort mit den mitgelieferten Beispiel-Traces:
@@ -57,7 +57,7 @@ Der Exit-Code ist 1, sobald etwas Breaking auftaucht, also passt es direkt in di
 
 ```yaml
 - run: node run-agent-suite.js --out traces/current.jsonl
-- run: npx whatbroke diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
+- run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
 `--fail-on warning` für strengere Gates, `--fail-on never`, wenn du nur den Bericht willst.

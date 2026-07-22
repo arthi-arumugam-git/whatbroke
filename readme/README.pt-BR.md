@@ -4,7 +4,7 @@
 
 **Compare o comportamento do seu agente de IA entre duas execuções.**
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![npm](https://img.shields.io/npm/v/whatbroke-cli)](https://www.npmjs.com/package/whatbroke-cli) [![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md) · [हिन्दी](README.hi.md)
 
@@ -21,13 +21,13 @@ Esse é um caso real de troca para um modelo mais barato. O agente ficou 75% mai
 ## Instalação
 
 ```
-npm install -g whatbroke
+npm install -g whatbroke-cli
 ```
 
 Ou rode direto:
 
 ```
-npx whatbroke diff before.jsonl after.jsonl
+npx whatbroke-cli diff before.jsonl after.jsonl
 ```
 
 Experimente agora com os traces de exemplo que vêm no pacote:
@@ -57,7 +57,7 @@ O código de saída é 1 quando aparece algo breaking, então dá para colocar d
 
 ```yaml
 - run: node run-agent-suite.js --out traces/current.jsonl
-- run: npx whatbroke diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
+- run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
 `--fail-on warning` se você quer portões mais rígidos, `--fail-on never` se só quer o relatório.

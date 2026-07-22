@@ -4,7 +4,7 @@
 
 **AI 에이전트의 두 실행 사이 동작을 diff로 비교하세요.**
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
+[![npm](https://img.shields.io/npm/v/whatbroke-cli)](https://www.npmjs.com/package/whatbroke-cli) [![license](https://img.shields.io/badge/license-MIT-blue)](../LICENSE)
 
 [English](../README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Español](README.es.md) · [Português](README.pt-BR.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Русский](README.ru.md) · [हिन्दी](README.hi.md)
 
@@ -21,13 +21,13 @@
 ## 설치
 
 ```
-npm install -g whatbroke
+npm install -g whatbroke-cli
 ```
 
 또는 바로 실행:
 
 ```
-npx whatbroke diff before.jsonl after.jsonl
+npx whatbroke-cli diff before.jsonl after.jsonl
 ```
 
 번들된 예제 trace로 지금 바로 시험해 보세요:
@@ -57,7 +57,7 @@ breaking이 나오면 종료 코드가 1이라 CI에 바로 넣을 수 있습니
 
 ```yaml
 - run: node run-agent-suite.js --out traces/current.jsonl
-- run: npx whatbroke diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
+- run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
 더 엄격하게 하려면 `--fail-on warning`, 리포트만 보려면 `--fail-on never`.

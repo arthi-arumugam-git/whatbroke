@@ -4,7 +4,7 @@
 
 **Diff your AI agent's behavior between two runs.**
 
-[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![npm](https://img.shields.io/npm/v/whatbroke-cli)](https://www.npmjs.com/package/whatbroke-cli) [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [English](README.md) · [简体中文](readme/README.zh-CN.md) · [日本語](readme/README.ja.md) · [한국어](readme/README.ko.md) · [Español](readme/README.es.md) · [Português](readme/README.pt-BR.md) · [Français](readme/README.fr.md) · [Deutsch](readme/README.de.md) · [Русский](readme/README.ru.md) · [हिन्दी](readme/README.hi.md)
 
@@ -21,13 +21,13 @@ That's a real failure mode from swapping to a cheaper model. The agent got 75% c
 ## Install
 
 ```
-npm install -g whatbroke
+npm install -g whatbroke-cli
 ```
 
 Or run it directly:
 
 ```
-npx whatbroke diff before.jsonl after.jsonl
+npx whatbroke-cli diff before.jsonl after.jsonl
 ```
 
 Try it right now with the bundled example traces:
@@ -57,7 +57,7 @@ Exit code is 1 when something breaking shows up, so you can put it straight into
 
 ```yaml
 - run: node run-agent-suite.js --out traces/current.jsonl
-- run: npx whatbroke diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
+- run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
 `--fail-on warning` if you want stricter gates, `--fail-on never` if you just want the report.
