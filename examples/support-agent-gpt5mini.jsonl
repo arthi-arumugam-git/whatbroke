@@ -1,0 +1,26 @@
+{"type":"run_start","run":"refund-flow","meta":{"model":"gpt-5-mini","scenario":"customer asks for a refund on order A-1042"}}
+{"type":"llm_call","run":"refund-flow","model":"gpt-5-mini","latency_ms":610,"tokens":{"input":1240,"output":71},"cost_usd":0.0011}
+{"type":"tool_call","run":"refund-flow","name":"lookup_order","args":{"order_id":"A-1042"},"latency_ms":120}
+{"type":"llm_call","run":"refund-flow","model":"gpt-5-mini","latency_ms":680,"tokens":{"input":1410,"output":52},"cost_usd":0.0012}
+{"type":"tool_call","run":"refund-flow","name":"issue_refund","args":{"order_id":"A-1042","amount":425,"reason":"damaged item"},"latency_ms":340}
+{"type":"llm_call","run":"refund-flow","model":"gpt-5-mini","latency_ms":450,"tokens":{"input":1520,"output":49},"cost_usd":0.0012}
+{"type":"output","run":"refund-flow","content":"Your refund of $425.00 for order A-1042 has been issued. It should appear in 3-5 business days."}
+{"type":"run_end","run":"refund-flow","status":"ok"}
+{"type":"run_start","run":"cancel-subscription","meta":{"model":"gpt-5-mini","scenario":"customer wants to cancel their subscription"}}
+{"type":"llm_call","run":"cancel-subscription","model":"gpt-5-mini","latency_ms":590,"tokens":{"input":1180,"output":88},"cost_usd":0.001}
+{"type":"tool_call","run":"cancel-subscription","name":"get_subscription","args":{"customer_id":"C-889"},"latency_ms":95}
+{"type":"llm_call","run":"cancel-subscription","model":"gpt-5-mini","latency_ms":620,"tokens":{"input":1350,"output":112},"cost_usd":0.0011}
+{"type":"output","run":"cancel-subscription","content":"I can help with that. To confirm the cancellation, please reply CONFIRM and I will process it right away."}
+{"type":"run_end","run":"cancel-subscription","status":"ok"}
+{"type":"run_start","run":"order-status","meta":{"model":"gpt-5-mini","scenario":"customer asks where their order is"}}
+{"type":"llm_call","run":"order-status","model":"gpt-5-mini","latency_ms":540,"tokens":{"input":1100,"output":74},"cost_usd":0.001}
+{"type":"tool_call","run":"order-status","name":"lookup_order","args":{"order_id":"B-2210"},"latency_ms":110}
+{"type":"llm_call","run":"order-status","model":"gpt-5-mini","latency_ms":480,"tokens":{"input":1290,"output":66},"cost_usd":0.001}
+{"type":"output","run":"order-status","content":"Order B-2210 shipped yesterday and is expected to arrive Friday."}
+{"type":"run_end","run":"order-status","status":"ok"}
+{"type":"run_start","run":"angry-escalation","meta":{"model":"gpt-5-mini","scenario":"furious customer demands a manager"}}
+{"type":"llm_call","run":"angry-escalation","model":"gpt-5-mini","latency_ms":650,"tokens":{"input":1330,"output":96},"cost_usd":0.001}
+{"type":"tool_call","run":"angry-escalation","name":"create_ticket","args":{"priority":"normal","team":"support-general"},"latency_ms":150}
+{"type":"llm_call","run":"angry-escalation","model":"gpt-5-mini","latency_ms":510,"tokens":{"input":1480,"output":81},"cost_usd":0.001}
+{"type":"output","run":"angry-escalation","content":"I'm sorry to hear that. I've created a ticket for your issue and our team will get back to you soon."}
+{"type":"run_end","run":"angry-escalation","status":"ok"}

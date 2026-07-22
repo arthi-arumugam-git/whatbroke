@@ -1,0 +1,28 @@
+{"type":"run_start","run":"refund-flow","meta":{"model":"gpt-4o","scenario":"customer asks for a refund on order A-1042"}}
+{"type":"llm_call","run":"refund-flow","model":"gpt-4o","latency_ms":840,"tokens":{"input":1240,"output":86},"cost_usd":0.0044}
+{"type":"tool_call","run":"refund-flow","name":"lookup_order","args":{"order_id":"A-1042"},"latency_ms":120}
+{"type":"llm_call","run":"refund-flow","model":"gpt-4o","latency_ms":920,"tokens":{"input":1410,"output":64},"cost_usd":0.0048}
+{"type":"tool_call","run":"refund-flow","name":"issue_refund","args":{"order_id":"A-1042","amount":42.5,"reason":"damaged item"},"latency_ms":340}
+{"type":"llm_call","run":"refund-flow","model":"gpt-4o","latency_ms":610,"tokens":{"input":1520,"output":58},"cost_usd":0.0049}
+{"type":"output","run":"refund-flow","content":"Your refund of $42.50 for order A-1042 has been issued. It should appear in 3-5 business days."}
+{"type":"run_end","run":"refund-flow","status":"ok"}
+{"type":"run_start","run":"cancel-subscription","meta":{"model":"gpt-4o","scenario":"customer wants to cancel their subscription"}}
+{"type":"llm_call","run":"cancel-subscription","model":"gpt-4o","latency_ms":780,"tokens":{"input":1180,"output":92},"cost_usd":0.0042}
+{"type":"tool_call","run":"cancel-subscription","name":"get_subscription","args":{"customer_id":"C-889"},"latency_ms":95}
+{"type":"llm_call","run":"cancel-subscription","model":"gpt-4o","latency_ms":850,"tokens":{"input":1350,"output":71},"cost_usd":0.0046}
+{"type":"tool_call","run":"cancel-subscription","name":"cancel_subscription","args":{"customer_id":"C-889","effective":"end_of_period"},"latency_ms":210}
+{"type":"llm_call","run":"cancel-subscription","model":"gpt-4o","latency_ms":590,"tokens":{"input":1460,"output":55},"cost_usd":0.0047}
+{"type":"output","run":"cancel-subscription","content":"Your subscription is cancelled effective at the end of the current billing period. You keep access until then."}
+{"type":"run_end","run":"cancel-subscription","status":"ok"}
+{"type":"run_start","run":"order-status","meta":{"model":"gpt-4o","scenario":"customer asks where their order is"}}
+{"type":"llm_call","run":"order-status","model":"gpt-4o","latency_ms":720,"tokens":{"input":1100,"output":78},"cost_usd":0.0039}
+{"type":"tool_call","run":"order-status","name":"lookup_order","args":{"order_id":"B-2210"},"latency_ms":110}
+{"type":"llm_call","run":"order-status","model":"gpt-4o","latency_ms":640,"tokens":{"input":1290,"output":66},"cost_usd":0.0043}
+{"type":"output","run":"order-status","content":"Order B-2210 shipped yesterday and is expected to arrive Friday."}
+{"type":"run_end","run":"order-status","status":"ok"}
+{"type":"run_start","run":"angry-escalation","meta":{"model":"gpt-4o","scenario":"furious customer demands a manager"}}
+{"type":"llm_call","run":"angry-escalation","model":"gpt-4o","latency_ms":880,"tokens":{"input":1330,"output":104},"cost_usd":0.0047}
+{"type":"tool_call","run":"angry-escalation","name":"create_ticket","args":{"priority":"high","team":"support-escalations"},"latency_ms":150}
+{"type":"llm_call","run":"angry-escalation","model":"gpt-4o","latency_ms":700,"tokens":{"input":1480,"output":89},"cost_usd":0.0049}
+{"type":"output","run":"angry-escalation","content":"I understand this has been frustrating. I've escalated your case to our support team with high priority. Ticket #4471, someone will reach out within 2 hours."}
+{"type":"run_end","run":"angry-escalation","status":"ok"}
