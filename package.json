@@ -1,0 +1,56 @@
+{
+  "name": "whatbroke",
+  "version": "0.1.0",
+  "description": "Diff your AI agent's behavior between two runs. Swap a model, change a prompt, run whatbroke, see exactly what changed.",
+  "keywords": [
+    "ai-agents",
+    "llm",
+    "evals",
+    "regression-testing",
+    "diff",
+    "tracing",
+    "openai",
+    "anthropic"
+  ],
+  "license": "MIT",
+  "author": "Arthi Arumugam",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arthi-arumugam-git/whatbroke.git"
+  },
+  "type": "module",
+  "bin": {
+    "whatbroke": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "examples"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean",
+    "test": "vitest run",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
