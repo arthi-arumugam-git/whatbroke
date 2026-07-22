@@ -3,21 +3,36 @@ import pc from "picocolors";
 import { diffTraces } from "./diff.js";
 import { diffTracesSampled, hasSamples } from "./samples.js";
 import { loadTrace } from "./parse.js";
+import { startProxy } from "./proxy.js";
 import { renderMarkdown, renderTerminal } from "./report.js";
 
 const HELP = `whatbroke - diff your AI agent's behavior between two runs
 
 usage:
   whatbroke diff <before.jsonl> <after.jsonl> [options]
+  whatbroke record --out <trace.jsonl> [options]
 
-options:
+diff options:
   --json              machine-readable output
   --md                markdown output (drop it in a PR comment)
   --fail-on <level>   exit 1 on: breaking (default), warning, never
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
-  -h, --help          show this
+
+record options:
+  --out <file>        trace file to write (required)
+  --port <n>          port to listen on (default 4141)
+  --run <name>        run id when no x-whatbroke-run header is sent
+  --target <url>      forward everything to this origin instead
+
+record starts a local proxy. point your agent at it and run it unchanged:
+  OPENAI_BASE_URL=http://127.0.0.1:4141/v1     (openai sdk)
+  ANTHROPIC_BASE_URL=http://127.0.0.1:4141     (anthropic sdk)
+stop it with ctrl-c, then diff the trace against a baseline.
+
+nondeterministic agent? record each scenario a few times as name#1, name#2, ...
+and diff will report a flap rate per finding instead of noise.
 
 trace format: one JSON event per line
   {"type":"run_start","run":"refund-flow","meta":{"model":"gpt-4o"}}
@@ -26,7 +41,7 @@ trace format: one JSON event per line
   {"type":"output","run":"refund-flow","content":"Refund issued."}
   {"type":"run_end","run":"refund-flow","status":"ok"}
 
-record traces with the SDK (import { Recorder } from "whatbroke") or write
+you can also record with the SDK (import { Recorder } from "whatbroke") or write
 the JSONL yourself from any language. Full docs: https://github.com/arthi-arumugam-git/whatbroke
 `;
 
@@ -44,6 +59,10 @@ function main(): void {
   }
 
   const command = argv[0];
+  if (command === "record") {
+    runRecord(argv.slice(1));
+    return;
+  }
   if (command !== "diff") fail(`unknown command: ${command}`);
 
   const positional: string[] = [];
@@ -120,6 +139,64 @@ function main(): void {
     (failOn === "breaking" && result.breaking > 0) ||
     (failOn === "warning" && (result.breaking > 0 || result.warnings > 0));
   process.exit(shouldFail ? 1 : 0);
+}
+
+function runRecord(argv: string[]): void {
+  let out = "";
+  let port = 4141;
+  let run: string | undefined;
+  let target: string | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--out":
+        out = argv[++i] ?? "";
+        break;
+      case "--port": {
+        const value = Number(argv[++i]);
+        if (!Number.isInteger(value) || value < 0 || value > 65535) {
+          fail(`--port needs a number between 0 and 65535`);
+        }
+        port = value;
+        break;
+      }
+      case "--run":
+        run = argv[++i];
+        break;
+      case "--target":
+        target = argv[++i];
+        break;
+      default:
+        fail(`unknown option: ${arg}`);
+    }
+  }
+
+  if (!out) fail("record needs --out <trace.jsonl>");
+
+  startProxy({
+    file: out,
+    port,
+    run,
+    target,
+    onRecord: (runId, model, toolNames) => {
+      const tools = toolNames.length ? ` -> ${toolNames.join(", ")}` : "";
+      console.log(pc.dim(`  [${runId}] ${model}${tools}`));
+    },
+  })
+    .then((proxy) => {
+      console.log(`recording to ${out}`);
+      console.log(pc.dim(`  OPENAI_BASE_URL=${proxy.url}/v1`));
+      console.log(pc.dim(`  ANTHROPIC_BASE_URL=${proxy.url}`));
+      console.log(pc.dim("  ctrl-c to stop"));
+      console.log("");
+      process.on("SIGINT", () => {
+        proxy.close().finally(() => process.exit(0));
+      });
+    })
+    .catch((err) => {
+      fail(err instanceof Error ? err.message : String(err));
+    });
 }
 
 main();

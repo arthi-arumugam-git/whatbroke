@@ -81,5 +81,12 @@ describe("cli", () => {
     const result = cli(["--help"]);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("usage:");
+    expect(result.stdout).toContain("whatbroke record");
+  });
+
+  it("exits 2 when record is missing --out", () => {
+    const result = cli(["record"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--out");
   });
 });

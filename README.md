@@ -54,6 +54,22 @@ Exit code is 1 when something breaking shows up, so you can put it straight into
 
 `--fail-on warning` if you want stricter gates, `--fail-on never` if you just want the report.
 
+## Flaky agents
+
+Agents don't do the same thing twice, so a single before/after comparison can blame the change for noise the agent was already making. Record each scenario a few times and suffix the run ids:
+
+```
+refund-flow#1, refund-flow#2, refund-flow#3
+```
+
+whatbroke notices the suffixes, compares every before sample against every after sample, and puts a rate on each finding:
+
+```
+! issue_refund called with different args (amount) (6/9 run pairs)
+```
+
+Anything that also flaps between two *baseline* samples gets demoted to flaky info, because your agent behaved that way before the change too. Breaking findings that show up in under half the pairs soften to warnings. What's left is signal.
+
 ## Recording traces
 
 The trace format is deliberately boring: JSONL you can write from any language in ten minutes.
@@ -65,6 +81,22 @@ The trace format is deliberately boring: JSONL you can write from any language i
 {"type":"output","run":"refund-flow","content":"Refund issued."}
 {"type":"run_end","run":"refund-flow","status":"ok"}
 ```
+
+The fastest way to get one is the proxy. Zero code changes, any language:
+
+```
+whatbroke record --out traces/current.jsonl
+```
+
+Then point your agent at it and run it exactly as you always do:
+
+```
+OPENAI_BASE_URL=http://127.0.0.1:4141/v1 node my-agent.js
+# or
+ANTHROPIC_BASE_URL=http://127.0.0.1:4141 node my-agent.js
+```
+
+Every LLM call, tool call, and final answer lands in the trace. Streaming works, responses pass through untouched. If you drive several scenarios, send an `x-whatbroke-run` header per request to name the runs.
 
 If you're in Node, the SDK wraps your existing client and records everything automatically:
 
@@ -95,6 +127,12 @@ whatbroke diff <before.jsonl> <after.jsonl>
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+whatbroke record --out <trace.jsonl>
+
+  --port <n>          port to listen on (default 4141)
+  --run <name>        run id when no x-whatbroke-run header is sent
+  --target <url>      forward everything to this origin instead
 ```
 
 ## Why not just use evals?
@@ -105,7 +143,8 @@ Deterministic, offline, no API keys, no accounts. Your traces never leave your m
 
 ## Roadmap
 
-- [ ] Multi-sample runs, so flaky behavior shows up as a flap rate instead of noise
+- [x] Multi-sample runs, so flaky behavior shows up as a flap rate instead of noise
+- [x] Proxy capture (`whatbroke record`), traces without touching your code
 - [ ] Importers for LangSmith and Langfuse trace exports
 - [ ] Python recorder
 - [ ] `whatbroke watch` to auto-diff against a baseline while you iterate
