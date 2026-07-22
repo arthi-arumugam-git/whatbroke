@@ -1,7 +1,5 @@
 # whatbroke
 
-[![ci](https://github.com/arthi-arumugam-git/whatbroke/actions/workflows/ci.yml/badge.svg)](https://github.com/arthi-arumugam-git/whatbroke/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/whatbroke)](https://www.npmjs.com/package/whatbroke)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Diff your AI agent's behavior between two runs. Swap a model, tweak a prompt, bump a framework version, then run `whatbroke` and see exactly what changed: which tool calls disappeared, which arguments drifted, where cost and latency moved, and which outputs flipped.
