@@ -18,6 +18,11 @@
     "type": "git",
     "url": "git+https://github.com/arthi-arumugam-git/whatbroke.git"
   },
+  "homepage": "https://github.com/arthi-arumugam-git/whatbroke#readme",
+  "bugs": {
+    "url": "https://github.com/arthi-arumugam-git/whatbroke/issues"
+  },
+  "sideEffects": false,
   "type": "module",
   "bin": {
     "whatbroke": "./dist/cli.js"

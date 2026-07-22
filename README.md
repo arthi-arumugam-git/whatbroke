@@ -1,29 +1,14 @@
 # whatbroke
 
+[![ci](https://github.com/arthi-arumugam-git/whatbroke/actions/workflows/ci.yml/badge.svg)](https://github.com/arthi-arumugam-git/whatbroke/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/whatbroke)](https://www.npmjs.com/package/whatbroke)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Diff your AI agent's behavior between two runs. Swap a model, tweak a prompt, bump a framework version, then run `whatbroke` and see exactly what changed: which tool calls disappeared, which arguments drifted, where cost and latency moved, and which outputs flipped.
 
 Text diffs can't see this. Your agent can say "your subscription is cancelled" while silently skipping the `cancel_subscription` call. The words look fine. The behavior broke.
 
-```
-$ whatbroke diff traces/gpt-4o.jsonl traces/gpt-5-mini.jsonl
-
- CHANGED  refund-flow
-  2 -> 2 tool calls  ·  3 -> 3 llm calls  ·  2.8s -> 2.2s  ·  $0.0141 -> $0.0035
-  ! issue_refund called with different args (amount)
-      - {"amount":42.5}
-      + {"amount":425}
-
- BROKE  cancel-subscription
-  2 -> 1 tool calls  ·  3 -> 2 llm calls  ·  2.5s -> 1.3s  ·  $0.0135 -> $0.0021
-  x tool call dropped: cancel_subscription
-  ! final output changed
-      - Your subscription is cancelled effective at the end of the current billing period.
-      + I can help with that. To confirm the cancellation, please reply CONFIRM and I will process it.
-
- OK  order-status
-
-1 breaking  ·  5 changed  ·  4 info
-```
+![whatbroke diff output showing a dropped tool call and changed refund amount after a model swap](.github/demo.svg)
 
 That's a real failure mode from swapping to a cheaper model. The agent got 75% cheaper, kept passing the vibe check, and stopped actually cancelling subscriptions. It also started refunding $425 instead of $42.50.
 
