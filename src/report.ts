@@ -47,7 +47,7 @@ export function renderTerminal(result: DiffResult): string {
     if (stat) lines.push(pc.dim(`  ${stat}`));
 
     for (const f of run.findings) {
-      lines.push(color(f.severity, `  ${ICONS[f.severity]} ${f.message}`));
+      lines.push(color(f.severity, `  ${ICONS[f.severity]} ${f.message}${annotation(f)}`));
       if (f.detail?.before !== undefined || f.detail?.after !== undefined) {
         if (f.detail.before !== undefined)
           lines.push(pc.red(`      - ${compact(f.detail.before)}`));
@@ -75,7 +75,7 @@ export function renderMarkdown(result: DiffResult): string {
     lines.push("");
     for (const f of run.findings) {
       const tag = f.severity === "breaking" ? "**BROKE**" : f.severity === "warning" ? "changed" : "info";
-      lines.push(`- ${tag}: ${f.message}`);
+      lines.push(`- ${tag}: ${f.message}${annotationPlain(f)}`);
       if (f.detail?.before !== undefined) lines.push(`  - before: \`${compact(f.detail.before)}\``);
       if (f.detail?.after !== undefined) lines.push(`  - after: \`${compact(f.detail.after)}\``);
     }
@@ -86,6 +86,18 @@ export function renderMarkdown(result: DiffResult): string {
     lines.push("");
   }
   return lines.join("\n");
+}
+
+function annotationPlain(f: Finding): string {
+  if (!f.rate) return "";
+  return f.flaky
+    ? ` (${f.rate} run pairs, also flaps in the baseline)`
+    : ` (${f.rate} run pairs)`;
+}
+
+function annotation(f: Finding): string {
+  const plain = annotationPlain(f);
+  return plain ? pc.dim(plain) : "";
 }
 
 function worstSeverity(findings: Finding[]): Severity | null {

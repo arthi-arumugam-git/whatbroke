@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import pc from "picocolors";
 import { diffTraces } from "./diff.js";
+import { diffTracesSampled, hasSamples } from "./samples.js";
 import { loadTrace } from "./parse.js";
 import { renderMarkdown, renderTerminal } from "./report.js";
 
@@ -98,7 +99,11 @@ function main(): void {
   try {
     const before = loadTrace(positional[0]);
     const after = loadTrace(positional[1]);
-    result = diffTraces(before, after, { latencyThreshold, costThreshold, compareOutputs });
+    const options = { latencyThreshold, costThreshold, compareOutputs };
+    result =
+      hasSamples(before) || hasSamples(after)
+        ? diffTracesSampled(before, after, options)
+        : diffTraces(before, after, options);
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
   }

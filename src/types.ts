@@ -63,6 +63,12 @@ export type Severity = "breaking" | "warning" | "info";
 
 export interface Finding {
   severity: Severity;
+  /** stable identity for the thing that changed (tool name, "output", ...), used to correlate findings across sampled runs */
+  subject?: string;
+  /** how often this finding appeared across sampled run pairs, e.g. "4/9" */
+  rate?: string;
+  /** true when the same finding also shows up between baseline samples, i.e. the agent was already flaky here */
+  flaky?: boolean;
   kind:
     | "run_missing"
     | "run_added"

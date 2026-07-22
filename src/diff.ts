@@ -85,6 +85,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     add({
       severity: "breaking",
       kind: "status_changed",
+      subject: "status",
       run: runId,
       message: `run now fails${after.error ? `: ${after.error}` : ""}`,
     });
@@ -92,6 +93,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     add({
       severity: "info",
       kind: "status_changed",
+      subject: "status",
       run: runId,
       message: "run now succeeds (was failing)",
     });
@@ -108,6 +110,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     add({
       severity: "info",
       kind: "model_changed",
+      subject: "model",
       run: runId,
       message: `model: ${sBefore.models.join(", ")} -> ${sAfter.models.join(", ")}`,
     });
@@ -120,6 +123,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
       add({
         severity: "breaking",
         kind: "tool_error",
+        subject: t.name,
         run: runId,
         message: `tool ${t.name} now errors: ${t.error}`,
       });
@@ -140,6 +144,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
       add({
         severity: "warning",
         kind: "tool_reordered",
+        subject: "tool-order",
         run: runId,
         message: `tool order changed: ${orderBefore} -> ${orderAfter}`,
       });
@@ -169,6 +174,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
         add({
           severity: "breaking",
           kind: "tool_removed",
+          subject: before.toolCalls[i].name,
           run: runId,
           message: `tool call dropped: ${before.toolCalls[i].name}`,
           detail: { args: before.toolCalls[i].args },
@@ -180,6 +186,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
         add({
           severity: "warning",
           kind: "tool_added",
+          subject: after.toolCalls[j].name,
           run: runId,
           message: `new tool call: ${after.toolCalls[j].name}`,
           detail: { args: after.toolCalls[j].args },
@@ -194,6 +201,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
       add({
         severity: "warning",
         kind: "tool_args_changed",
+        subject: before.toolCalls[i].name,
         run: runId,
         message: `${before.toolCalls[i].name} called with different args (${keys.join(", ")})`,
         detail: {
@@ -213,6 +221,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
       add({
         severity: "breaking",
         kind: "output_missing",
+        subject: "output",
         run: runId,
         message: "run no longer produces an output",
       });
@@ -220,6 +229,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
       add({
         severity: "warning",
         kind: "output_changed",
+        subject: "output",
         run: runId,
         message: "final output changed",
         detail: { before: truncate(outBefore), after: truncate(outAfter) },
@@ -233,6 +243,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     add({
       severity: "warning",
       kind: "latency_regression",
+      subject: "latency",
       run: runId,
       message: `latency up ${pct}% (${fmtMs(sBefore.latencyMs)} -> ${fmtMs(sAfter.latencyMs)})`,
     });
@@ -244,6 +255,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     add({
       severity: "warning",
       kind: "cost_increase",
+      subject: "cost",
       run: runId,
       message: `cost up ${pct}% ($${sBefore.costUsd.toFixed(4)} -> $${sAfter.costUsd.toFixed(4)})`,
     });
@@ -256,6 +268,7 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     add({
       severity: "info",
       kind: "token_change",
+      subject: "tokens",
       run: runId,
       message: `total tokens ${tokBefore} -> ${tokAfter}`,
     });
@@ -305,6 +318,7 @@ export function diffTraces(
           {
             severity: "breaking",
             kind: "run_missing",
+            subject: "run",
             run: id,
             message: "run missing from the new trace",
           },
@@ -318,6 +332,7 @@ export function diffTraces(
           {
             severity: "info",
             kind: "run_added",
+            subject: "run",
             run: id,
             message: "new run, nothing to compare against",
           },
