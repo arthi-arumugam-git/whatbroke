@@ -1,4 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const BEFORE = "examples/support-agent-gpt4o.jsonl";
@@ -26,6 +29,22 @@ function strip(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, "");
 }
 
+/** two traces whose diff has a changed-args finding and nothing breaking */
+function warningOnlyTraces(): [string, string] {
+  const dir = mkdtempSync(join(tmpdir(), "whatbroke-cli-"));
+  const trace = (args: Record<string, unknown>) =>
+    [
+      JSON.stringify({ type: "run_start", run: "flow" }),
+      JSON.stringify({ type: "tool_call", run: "flow", name: "lookup_order", args }),
+      JSON.stringify({ type: "run_end", run: "flow", status: "ok" }),
+    ].join("\n") + "\n";
+  const before = join(dir, "before.jsonl");
+  const after = join(dir, "after.jsonl");
+  writeFileSync(before, trace({ order_id: "A-1042" }));
+  writeFileSync(after, trace({ order_id: "A-2077" }));
+  return [before, after];
+}
+
 describe("cli", () => {
   it("exits 1 and reports the break on the example traces", () => {
     const result = cli(["diff", BEFORE, AFTER]);
@@ -39,6 +58,31 @@ describe("cli", () => {
   it("exits 0 with --fail-on never", () => {
     const result = cli(["diff", BEFORE, AFTER, "--fail-on", "never"]);
     expect(result.code).toBe(0);
+  });
+
+  it("exits 1 with --fail-on changed when the diff only has changed findings", () => {
+    const [before, after] = warningOnlyTraces();
+    const result = cli(["diff", before, after, "--fail-on", "changed"]);
+    expect(result.code).toBe(1);
+    expect(strip(result.stdout)).toContain("called with different args");
+  });
+
+  it("exits 0 with --fail-on breaking when the diff only has changed findings", () => {
+    const [before, after] = warningOnlyTraces();
+    const result = cli(["diff", before, after]);
+    expect(result.code).toBe(0);
+  });
+
+  it("exits 0 with --fail-on changed when nothing changed", () => {
+    const [before] = warningOnlyTraces();
+    const result = cli(["diff", before, before, "--fail-on", "changed"]);
+    expect(result.code).toBe(0);
+  });
+
+  it("exits 2 on a bogus --fail-on level", () => {
+    const result = cli(["diff", BEFORE, AFTER, "--fail-on", "vibes"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--fail-on");
   });
 
   it("exits 0 when nothing changed", () => {

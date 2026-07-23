@@ -20,7 +20,7 @@ usage:
 diff options:
   --json              machine-readable output
   --md                markdown output (drop it in a PR comment)
-  --fail-on <level>   exit 1 on: breaking (default), warning, never
+  --fail-on <level>   exit 1 on: breaking (default), changed, never
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
@@ -104,10 +104,14 @@ function main(): void {
         break;
       case "--fail-on": {
         const value = argv[++i];
-        if (value !== "breaking" && value !== "warning" && value !== "never") {
-          fail(`--fail-on must be breaking, warning, or never`);
+        // the report calls warning-severity findings "changed", accept both
+        if (value === "changed" || value === "warning") {
+          failOn = "warning";
+        } else if (value === "breaking" || value === "never") {
+          failOn = value;
+        } else {
+          fail(`--fail-on must be breaking, changed, or never`);
         }
-        failOn = value;
         break;
       }
       case "--latency": {
