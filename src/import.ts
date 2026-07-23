@@ -376,11 +376,11 @@ function importOtel(values: unknown[], options: ImportOptions): ImportResult {
 /** gen_ai.output.messages: [{role, parts:[{type:"text", content}], finish_reason}] */
 function outputMessagesText(value: unknown): string | undefined {
   let messages = value;
-  if (typeof messages === "string") {
+  if (typeof value === "string") {
     try {
-      messages = JSON.parse(messages);
+      messages = JSON.parse(value);
     } catch {
-      return messages;
+      return value;
     }
   }
   if (!Array.isArray(messages)) return undefined;
