@@ -340,6 +340,117 @@ describe("langfuse import", () => {
   });
 });
 
+const LS_ROOT = {
+  id: "a1b2c3d4-0000-0000-0000-000000000000",
+  trace_id: "a1b2c3d4-0000-0000-0000-000000000000",
+  parent_run_id: null,
+  dotted_order: "20260720T100000000001Za1b2c3d4",
+  name: "refund-agent",
+  run_type: "chain",
+  start_time: "2026-07-20T10:00:00.000Z",
+  end_time: "2026-07-20T10:00:02.000Z",
+  inputs: { question: "Weather in Paris?" },
+  outputs: { output: "Rainy, 14C." },
+  error: null,
+  session_id: "my-project",
+};
+
+const LS_LLM = {
+  id: "c9c84f10-0000-0000-0000-000000000000",
+  trace_id: "a1b2c3d4-0000-0000-0000-000000000000",
+  parent_run_id: "a1b2c3d4-0000-0000-0000-000000000000",
+  dotted_order: "20260720T100000000001Za1b2c3d4.20260720T100000100002Zc9c84f10",
+  name: "ChatOpenAI",
+  run_type: "llm",
+  start_time: "2026-07-20T10:00:00.100Z",
+  end_time: "2026-07-20T10:00:01.300Z",
+  inputs: { messages: [["user", "Weather in Paris?"]] },
+  outputs: {
+    generations: [[{ text: "Rainy, 14C.", generation_info: { finish_reason: "stop" } }]],
+    llm_output: { token_usage: { prompt_tokens: 100, completion_tokens: 42 }, model_name: "gpt-4o-mini" },
+  },
+  extra: { invocation_params: { model: "gpt-4o-mini", temperature: 0 } },
+  prompt_tokens: 100,
+  completion_tokens: 42,
+  total_tokens: 142,
+  total_cost: 0.000063,
+  error: null,
+  session_id: "my-project",
+};
+
+const LS_TOOL = {
+  id: "d0d95e21-0000-0000-0000-000000000000",
+  trace_id: "a1b2c3d4-0000-0000-0000-000000000000",
+  parent_run_id: "a1b2c3d4-0000-0000-0000-000000000000",
+  dotted_order: "20260720T100000000001Za1b2c3d4.20260720T100000050003Zd0d95e21",
+  name: "get_weather",
+  run_type: "tool",
+  start_time: "2026-07-20T10:00:00.050Z",
+  end_time: "2026-07-20T10:00:00.090Z",
+  inputs: { input: "Paris" },
+  outputs: { output: "14C, rain" },
+  error: null,
+  session_id: "my-project",
+};
+
+describe("langsmith import", () => {
+  it("maps an llm run to llm_call with model, tokens, cost, stop_reason", () => {
+    const result = importTrace(JSON.stringify([LS_ROOT, LS_LLM]), "langsmith");
+    const [llm] = only<LlmCallEvent>(result.events, "llm_call");
+    expect(llm.model).toBe("gpt-4o-mini");
+    expect(llm.tokens).toEqual({ input: 100, output: 42 });
+    expect(llm.cost_usd).toBe(0.000063);
+    expect(llm.stop_reason).toBe("stop");
+    expect(llm.latency_ms).toBe(1200);
+  });
+
+  it("maps a tool run to tool_call with inputs as args", () => {
+    const result = importTrace(JSON.stringify([LS_ROOT, LS_LLM, LS_TOOL]), "langsmith");
+    const [tool] = only<ToolCallEvent>(result.events, "tool_call");
+    expect(tool.name).toBe("get_weather");
+    expect(tool.args).toEqual({ input: "Paris" });
+  });
+
+  it("orders events by dotted_order and names the run after the root", () => {
+    const result = importTrace(JSON.stringify([LS_LLM, LS_ROOT, LS_TOOL]), "langsmith");
+    expect(result.events[0]).toMatchObject({ type: "run_start", run: "refund-agent" });
+    const kinds = result.events.map((e) => e.type);
+    // the tool's dotted_order sorts before the llm's even though it starts later in the array
+    expect(kinds.indexOf("tool_call")).toBeLessThan(kinds.indexOf("llm_call"));
+  });
+
+  it("emits the root run outputs.output as the output event", () => {
+    const result = importTrace(JSON.stringify([LS_ROOT, LS_LLM]), "langsmith");
+    const [out] = only<OutputEvent>(result.events, "output");
+    expect(out.content).toBe("Rainy, 14C.");
+  });
+
+  it("marks the run as error when the root recorded one", () => {
+    const failing = { ...LS_ROOT, error: "Tool timeout" };
+    const events = importTrace(JSON.stringify([failing, LS_LLM]), "langsmith").events;
+    const last = events[events.length - 1] as RunEndEvent;
+    expect(last.status).toBe("error");
+    expect(last.error).toBe("Tool timeout");
+  });
+
+  it("groups runs by trace_id and coerces string-decimal cost", () => {
+    const otherTrace = "b2c3d4e5-0000-0000-0000-000000000000";
+    const root2 = { ...LS_ROOT, id: otherTrace, trace_id: otherTrace, dotted_order: "20260720T110000000001Zb2c3d4e5" };
+    const llm2 = {
+      ...LS_LLM,
+      id: "e1e06f32-0000-0000-0000-000000000000",
+      trace_id: otherTrace,
+      parent_run_id: otherTrace,
+      dotted_order: "20260720T110000000001Zb2c3d4e5.20260720T110000100002Ze1e06f32",
+      total_cost: "0.000063",
+    };
+    const result = importTrace(JSON.stringify([LS_ROOT, LS_LLM, root2, llm2]), "langsmith");
+    expect(result.runs).toBe(2);
+    const llms = only<LlmCallEvent>(result.events, "llm_call");
+    expect(llms[1].cost_usd).toBe(0.000063);
+  });
+});
+
 function cli(args: string[]): { code: number; stdout: string; stderr: string } {
   try {
     const stdout = execFileSync(

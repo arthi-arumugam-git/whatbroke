@@ -533,7 +533,106 @@ function importLangfuse(values: unknown[], options: ImportOptions): ImportResult
 // ---------------------------------------------------------------------------
 
 function importLangsmith(values: unknown[], options: ImportOptions): ImportResult {
-  throw new Error("langsmith import is not wired up yet");
+  const runs = values.flatMap((v) => (Array.isArray(v) ? v : [v])).filter(isRecord);
+  if (!runs.length) throw new Error("no run objects found in the langsmith input");
+
+  const traces = new Map<string, Record<string, unknown>[]>();
+  for (const run of runs) {
+    const id = String(run.trace_id ?? run.id ?? "unknown");
+    const list = traces.get(id) ?? [];
+    list.push(run);
+    traces.set(id, list);
+  }
+
+  const tally = newTally();
+  const importedRuns: ImportedRun[] = [];
+  for (const [traceId, traceRuns] of traces) {
+    // dotted_order is a lexicographic execution-order key; that is its job
+    traceRuns.sort((a, b) => String(a.dotted_order ?? "").localeCompare(String(b.dotted_order ?? "")));
+
+    const root =
+      traceRuns.find((r) => String(r.id) === traceId) ?? traceRuns.find((r) => !r.parent_run_id);
+    const derivedName = String(root?.name ?? traceId);
+
+    const imported: ImportedRun = { derivedName, calls: [], status: "ok" };
+    if (root && typeof root.error === "string" && root.error) {
+      imported.status = "error";
+      imported.error = root.error;
+    }
+    for (const run of traceRuns) {
+      const start = isoMs(run.start_time);
+      const end = isoMs(run.end_time);
+      const latency = start !== undefined && end !== undefined && end > start ? end - start : undefined;
+      const errorText = typeof run.error === "string" && run.error ? run.error : undefined;
+      if (errorText && imported.status === "ok") {
+        imported.status = "error";
+        imported.error = errorText;
+      }
+      if (imported.startTs === undefined && start !== undefined) imported.startTs = start;
+      const orderKey = String(run.dotted_order ?? start ?? "");
+
+      if (run.run_type === "llm") {
+        const extra = isRecord(run.extra) ? run.extra : {};
+        const params = isRecord(extra.invocation_params) ? extra.invocation_params : {};
+        const outputs = isRecord(run.outputs) ? run.outputs : {};
+        const llmOutput = isRecord(outputs.llm_output) ? outputs.llm_output : {};
+        const model = String(
+          params.model ?? params.model_name ?? params.model_id ?? llmOutput.model_name ?? "unknown",
+        );
+        const event: LlmCallEvent = { type: "llm_call", run: "", model };
+        const usage = isRecord(llmOutput.token_usage) ? llmOutput.token_usage : {};
+        const input = toNum(run.prompt_tokens) ?? toNum(usage.prompt_tokens);
+        const output = toNum(run.completion_tokens) ?? toNum(usage.completion_tokens);
+        if (input !== undefined || output !== undefined) {
+          event.tokens = {};
+          if (input !== undefined) event.tokens.input = input;
+          if (output !== undefined) event.tokens.output = output;
+          tally.sawTokens = true;
+        }
+        const cost = toNum(run.total_cost);
+        if (cost !== undefined) {
+          event.cost_usd = cost;
+          tally.sawCost = true;
+        }
+        const stop = finishReason(outputs);
+        if (stop) event.stop_reason = stop;
+        if (latency !== undefined) event.latency_ms = latency;
+        if (errorText) event.error = errorText;
+        imported.calls.push({ startKey: orderKey, event });
+      } else if (run.run_type === "tool") {
+        const event: ToolCallEvent = { type: "tool_call", run: "", name: String(run.name ?? "tool") };
+        const args = parseArgs(run.inputs);
+        if (args) {
+          event.args = args;
+          tally.sawArgs = true;
+        }
+        if (latency !== undefined) event.latency_ms = latency;
+        if (errorText) event.error = errorText;
+        imported.calls.push({ startKey: orderKey, event });
+      }
+    }
+
+    if (root && isRecord(root.outputs)) {
+      const outputs = root.outputs;
+      const content = outputs.output ?? outputs.answer ?? outputs;
+      imported.output = contentOf(content);
+      tally.sawOutput = true;
+    }
+    importedRuns.push(imported);
+  }
+
+  return assemble(importedRuns, tally, options);
+}
+
+/** outputs.generations[0][0].generation_info.finish_reason, best-effort */
+function finishReason(outputs: Record<string, unknown>): string | undefined {
+  const generations = outputs.generations;
+  if (!Array.isArray(generations) || !generations.length) return undefined;
+  const first = Array.isArray(generations[0]) ? generations[0][0] : generations[0];
+  if (!isRecord(first)) return undefined;
+  const info = first.generation_info;
+  if (isRecord(info) && typeof info.finish_reason === "string") return info.finish_reason;
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
