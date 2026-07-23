@@ -1,4 +1,6 @@
 export { diffTraces } from "./diff.js";
+export { detectFormat, importTrace } from "./import.js";
+export type { ImportFormat, ImportOptions, ImportResult } from "./import.js";
 export { diffTracesSampled, hasSamples } from "./samples.js";
 export { loadTrace, parseTrace } from "./parse.js";
 export { startProxy } from "./proxy.js";

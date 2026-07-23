@@ -1,6 +1,10 @@
 #!/usr/bin/env node
+import { readFileSync, writeFileSync } from "node:fs";
+import { basename, dirname, extname, join } from "node:path";
 import pc from "picocolors";
 import { diffTraces } from "./diff.js";
+import { importTrace } from "./import.js";
+import type { ImportFormat } from "./import.js";
 import { diffTracesSampled, hasSamples } from "./samples.js";
 import { loadTrace } from "./parse.js";
 import { startProxy } from "./proxy.js";
@@ -10,6 +14,7 @@ const HELP = `whatbroke - diff your AI agent's behavior between two runs
 
 usage:
   whatbroke diff <before.jsonl> <after.jsonl> [options]
+  whatbroke import <trace-export> [options]
   whatbroke record --out <trace.jsonl> [options]
 
 diff options:
@@ -19,6 +24,15 @@ diff options:
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+import options:
+  -o, --out <file>    converted trace to write (default: <input>.whatbroke.jsonl)
+  --format <name>     otel | langfuse | langsmith (default: detect from the file)
+  --run <name>        base run name (default: derived from the source)
+
+import converts traces you already have into whatbroke JSONL: OTLP JSON span
+exports (anything emitting the OTel GenAI conventions, including the Vercel
+AI SDK), Langfuse export rows, and LangSmith run dumps.
 
 record options:
   --out <file>        trace file to write (required)
@@ -61,6 +75,10 @@ function main(): void {
   const command = argv[0];
   if (command === "record") {
     runRecord(argv.slice(1));
+    return;
+  }
+  if (command === "import") {
+    runImport(argv.slice(1));
     return;
   }
   if (command !== "diff") fail(`unknown command: ${command}`);
@@ -139,6 +157,73 @@ function main(): void {
     (failOn === "breaking" && result.breaking > 0) ||
     (failOn === "warning" && (result.breaking > 0 || result.warnings > 0));
   process.exit(shouldFail ? 1 : 0);
+}
+
+function runImport(argv: string[]): void {
+  const positional: string[] = [];
+  let out = "";
+  let format: ImportFormat | undefined;
+  let run: string | undefined;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    switch (arg) {
+      case "-o":
+      case "--out":
+        out = argv[++i] ?? "";
+        break;
+      case "--format": {
+        const value = argv[++i];
+        if (value !== "otel" && value !== "langfuse" && value !== "langsmith") {
+          fail(`--format must be otel, langfuse, or langsmith`);
+        }
+        format = value;
+        break;
+      }
+      case "--run":
+        run = argv[++i];
+        break;
+      default:
+        if (arg.startsWith("-")) fail(`unknown option: ${arg}`);
+        positional.push(arg);
+    }
+  }
+
+  if (positional.length !== 1) {
+    fail("import needs exactly one input file: whatbroke import trace-export.json");
+  }
+  const input = positional[0];
+  if (!out) {
+    const base = basename(input, extname(input));
+    out = join(dirname(input), `${base}.whatbroke.jsonl`);
+  }
+
+  let text: string;
+  try {
+    text = readFileSync(input, "utf8");
+  } catch {
+    fail(`could not read input file: ${input}`);
+  }
+
+  let result;
+  try {
+    result = importTrace(text, format, { run });
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+
+  writeFileSync(out, result.events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+
+  for (const warning of result.warnings) {
+    console.error(pc.yellow(`  note: ${warning}`));
+  }
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  console.log(
+    `imported ${plural(result.runs, "run")}, ${plural(result.llmCalls, "llm call")}, ${plural(result.toolCalls, "tool call")} -> ${out}`,
+  );
+  if (result.missing.length) {
+    console.log(pc.dim(`  not in the source: ${result.missing.join(", ")}`));
+  }
 }
 
 function runRecord(argv: string[]): void {

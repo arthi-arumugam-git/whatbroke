@@ -1,0 +1,55 @@
+{
+  "resourceSpans": [
+    {
+      "resource": { "attributes": [{ "key": "service.name", "value": { "stringValue": "refund-agent" } }] },
+      "scopeSpans": [
+        {
+          "scope": { "name": "@ai-sdk/otel" },
+          "spans": [
+            {
+              "traceId": "1BC8762A27DE54EE9559FC322D91420D",
+              "spanId": "A6AC5A6058192220",
+              "name": "refund-flow",
+              "startTimeUnixNano": "1700009000000000000",
+              "endTimeUnixNano": "1700009003000000000",
+              "attributes": [
+                { "key": "gen_ai.operation.name", "value": { "stringValue": "invoke_agent" } },
+                { "key": "gen_ai.agent.name", "value": { "stringValue": "refund-flow" } }
+              ]
+            },
+            {
+              "traceId": "1BC8762A27DE54EE9559FC322D91420D",
+              "spanId": "B7BD6B7169203331",
+              "parentSpanId": "A6AC5A6058192220",
+              "name": "chat gpt-4o",
+              "startTimeUnixNano": "1700009000100000000",
+              "endTimeUnixNano": "1700009001600000000",
+              "attributes": [
+                { "key": "gen_ai.operation.name", "value": { "stringValue": "chat" } },
+                { "key": "gen_ai.provider.name", "value": { "stringValue": "openai" } },
+                { "key": "gen_ai.request.model", "value": { "stringValue": "gpt-4o" } },
+                { "key": "gen_ai.usage.input_tokens", "value": { "intValue": "512" } },
+                { "key": "gen_ai.usage.output_tokens", "value": { "intValue": "128" } },
+                { "key": "gen_ai.response.finish_reasons", "value": { "arrayValue": { "values": [{ "stringValue": "tool_calls" }] } } },
+                { "key": "gen_ai.output.messages", "value": { "stringValue": "[{\"role\":\"assistant\",\"parts\":[{\"type\":\"text\",\"content\":\"Refund issued for order A-1042.\"}],\"finish_reason\":\"stop\"}]" } }
+              ]
+            },
+            {
+              "traceId": "1BC8762A27DE54EE9559FC322D91420D",
+              "spanId": "C8CE7C8270314442",
+              "parentSpanId": "B7BD6B7169203331",
+              "name": "execute_tool lookup_order",
+              "startTimeUnixNano": "1700009000500000000",
+              "endTimeUnixNano": "1700009000800000000",
+              "attributes": [
+                { "key": "gen_ai.operation.name", "value": { "stringValue": "execute_tool" } },
+                { "key": "gen_ai.tool.name", "value": { "stringValue": "lookup_order" } },
+                { "key": "gen_ai.tool.call.arguments", "value": { "stringValue": "{\"order_id\":\"A-2077\"}" } }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
