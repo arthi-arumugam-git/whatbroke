@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360" font-family="ui-monospace, SFMono-Regular, 'Cascadia Mono', 'JetBrains Mono', Menlo, Consolas, monospace" font-size="12.5">
+  <style>
+    .cover, .curwrap, .l1, .l2, .l3, .l4, .l5, .l6, .l7, .l8, .l9, .l10 {
+      animation-duration: 22s;
+      animation-iteration-count: infinite;
+      animation-timing-function: linear;
+    }
+    .cover { animation-name: type; }
+    .curwrap { animation-name: curhide; }
+    .cursor { animation: blink 1.1s steps(1, end) infinite; }
+    .l1 { animation-name: k1; opacity: 0; }
+    .l2 { animation-name: k2; opacity: 0; }
+    .l3 { animation-name: k3; opacity: 0; }
+    .l4 { animation-name: k4; opacity: 0; }
+    .l5 { animation-name: k5; opacity: 0; }
+    .l6 { animation-name: k6; opacity: 0; }
+    .l7 { animation-name: k7; opacity: 0; }
+    .l8 { animation-name: k8; opacity: 0; }
+    .l9 { animation-name: k9; opacity: 0; }
+    .l10 { animation-name: k10; opacity: 0; }
+    @keyframes type {
+      0% { transform: translateX(0); }
+      3% { transform: translateX(0); animation-timing-function: steps(62, end); }
+      17% { transform: translateX(470px); }
+      100% { transform: translateX(470px); }
+    }
+    @keyframes curhide {
+      0%, 19% { opacity: 1; }
+      19.5%, 100% { opacity: 0; }
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    @keyframes k1 { 0%, 19.5% { opacity: 0; } 20.7%, 100% { opacity: 1; } }
+    @keyframes k2 { 0%, 21.5% { opacity: 0; } 22.7%, 100% { opacity: 1; } }
+    @keyframes k3 { 0%, 25.5% { opacity: 0; } 26.7%, 100% { opacity: 1; } }
+    @keyframes k4 { 0%, 27.5% { opacity: 0; } 28.7%, 100% { opacity: 1; } }
+    @keyframes k5 { 0%, 29.5% { opacity: 0; } 30.7%, 100% { opacity: 1; } }
+    @keyframes k6 { 0%, 34.5% { opacity: 0; } 35.7%, 100% { opacity: 1; } }
+    @keyframes k7 { 0%, 41% { opacity: 0; } 42.2%, 100% { opacity: 1; } }
+    @keyframes k8 { 0%, 43% { opacity: 0; } 44.2%, 100% { opacity: 1; } }
+    @keyframes k9 { 0%, 47.5% { opacity: 0; } 48.7%, 100% { opacity: 1; } }
+    @keyframes k10 { 0%, 55% { opacity: 0; } 56.2%, 100% { opacity: 1; } }
+  </style>
+
+  <clipPath id="cmdline">
+    <rect x="24" y="50" width="752" height="24"/>
+  </clipPath>
+
+  <rect x="0.5" y="0.5" width="799" height="359" rx="10" fill="#0d0e11" stroke="#26282e"/>
+  <rect x="0.5" y="0.5" width="799" height="36" rx="10" fill="#15161a"/>
+  <rect x="0.5" y="26" width="799" height="10.5" fill="#15161a"/>
+  <circle cx="22" cy="18" r="6" fill="#f47067"/>
+  <circle cx="42" cy="18" r="6" fill="#daaa3f"/>
+  <circle cx="62" cy="18" r="6" fill="#57ab5a"/>
+  <text x="400" y="22" fill="#6a707a" text-anchor="middle" font-size="12">whatbroke</text>
+
+  <text x="24" y="68" fill="#5ad0a1">$ <tspan fill="#c9ccd1">whatbroke diff traces/llama32-3b.jsonl traces/llama32-1b.jsonl</tspan></text>
+  <g clip-path="url(#cmdline)">
+    <g class="cover">
+      <rect x="38" y="53" width="472" height="20" fill="#0d0e11"/>
+      <g class="curwrap">
+        <rect class="cursor" x="39" y="56" width="7" height="15" fill="#c9ccd1"/>
+      </g>
+    </g>
+  </g>
+
+  <g class="l1">
+    <rect x="24" y="90" width="76" height="20" rx="3" fill="#d9a53a"/>
+    <text x="62" y="104" fill="#14150f" text-anchor="middle" font-weight="600" font-size="11.5">CHANGED</text>
+    <text x="112" y="104" fill="#e8eaed" font-weight="700">duplicate-charge</text>
+  </g>
+  <text class="l2" x="40" y="126" fill="#6a707a">1 -&gt; 1 tool calls  ·  2 -&gt; 2 llm calls  ·  16.7s -&gt; 20.7s</text>
+  <text class="l3" x="40" y="148" fill="#d9a53a">! lookup_account called with different args (email, type, required, properties) <tspan fill="#6a707a">(6/9 run pairs)</tspan></text>
+  <text class="l4" x="72" y="170" fill="#d16a6a">- {"email":"maya.iyer@example.com"}</text>
+  <text class="l5" x="72" y="192" fill="#5ad0a1">+ {"type":"object","required":["email"],"properties":{...}}</text>
+  <text class="l6" x="40" y="214" fill="#d9a53a">! latency up 61% (17.7s -&gt; 28.5s) <tspan fill="#6a707a">(3/9 run pairs)</tspan></text>
+
+  <g class="l7">
+    <rect x="24" y="242" width="76" height="20" rx="3" fill="#d9a53a"/>
+    <text x="62" y="256" fill="#14150f" text-anchor="middle" font-weight="600" font-size="11.5">CHANGED</text>
+    <text x="112" y="256" fill="#e8eaed" font-weight="700">cancel-and-refund</text>
+  </g>
+  <text class="l8" x="40" y="278" fill="#6a707a">2 -&gt; 1 tool calls  ·  2 -&gt; 2 llm calls  ·  25.4s -&gt; 12.3s</text>
+  <text class="l9" x="40" y="300" fill="#8b919a">i tool call dropped: cancel_subscription <tspan fill="#6a707a">(6/9 run pairs, also flaps in the baseline)</tspan></text>
+
+  <text class="l10" x="24" y="338" fill="#d9a53a">3 changed<tspan fill="#6a707a">  ·  12 info</tspan></text>
+</svg>

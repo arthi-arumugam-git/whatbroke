@@ -14,11 +14,11 @@ Swap a model, tweak a prompt, bump a framework version, then run `whatbroke` and
 
 Text diffs can't see this. Your agent can say "your subscription is cancelled" while silently skipping the `cancel_subscription` call. The words look fine. The behavior broke.
 
-![whatbroke diff output showing a dropped tool call and changed refund amount after a model swap](.github/demo.svg)
+![animated terminal demo of whatbroke diff catching changed tool args and a dropped tool call after a model swap](.github/demo-animated.svg)
 
-That's a real failure mode from swapping to a cheaper model. The agent got 75% cheaper, kept passing the vibe check, and stopped actually cancelling subscriptions. It also started refunding $425 instead of $42.50.
+That's a real diff from swapping to a 3x smaller model, recorded on a laptop with ollama. The replies kept passing the vibe check while the model started sending its tool's own JSON schema as the tool arguments and skipping the actual cancellation call.
 
-For a version you can reproduce on a laptop with ollama, see the case study: [what a 3x smaller model changed in a tool-calling agent](docs/findings/llama32-3b-vs-1b.md). And if you're wondering how this fits next to promptfoo, LangSmith, or your eval suite: [when to use what](docs/when-to-use-what.md).
+For the full story and the commands to reproduce it, see the case study: [what a 3x smaller model changed in a tool-calling agent](docs/findings/llama32-3b-vs-1b.md). And if you're wondering how this fits next to promptfoo, LangSmith, or your eval suite: [when to use what](docs/when-to-use-what.md).
 
 ## Install
 
