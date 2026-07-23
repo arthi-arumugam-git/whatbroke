@@ -400,8 +400,132 @@ function outputMessagesText(value: unknown): string | undefined {
 // Langfuse export rows
 // ---------------------------------------------------------------------------
 
+/** export rows are snake_case, the public API is camelCase; accept both */
+function field(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in row && row[key] !== null && row[key] !== undefined) return row[key];
+  }
+  return undefined;
+}
+
+function isoMs(value: unknown): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function contentOf(output: unknown): string {
+  if (typeof output === "string") return output;
+  if (isRecord(output) && typeof output.content === "string") return output.content;
+  return stableStringify(output);
+}
+
 function importLangfuse(values: unknown[], options: ImportOptions): ImportResult {
-  throw new Error("langfuse import is not wired up yet");
+  const rows = values.flatMap((v) => (Array.isArray(v) ? v : [v])).filter(isRecord);
+  if (!rows.length) throw new Error("no observation rows found in the langfuse input");
+
+  const traces = new Map<string, Record<string, unknown>[]>();
+  for (const row of rows) {
+    const id = String(field(row, "trace_id", "traceId") ?? "unknown");
+    const list = traces.get(id) ?? [];
+    list.push(row);
+    traces.set(id, list);
+  }
+
+  const tally = newTally();
+  const importedRuns: ImportedRun[] = [];
+  for (const [traceId, traceRows] of traces) {
+    traceRows.sort((a, b) => {
+      const sa = isoMs(field(a, "start_time", "startTime")) ?? 0;
+      const sb = isoMs(field(b, "start_time", "startTime")) ?? 0;
+      return sa - sb;
+    });
+
+    const ids = new Set(traceRows.map((r) => field(r, "id")));
+    const isRoot = (row: Record<string, unknown>): boolean => {
+      const parent = field(row, "parent_observation_id", "parentObservationId");
+      return parent === undefined || !ids.has(parent);
+    };
+    const derivedName = String(field(traceRows[0], "trace_name", "traceName") ?? traceId);
+
+    const run: ImportedRun = { derivedName, calls: [], status: "ok" };
+    let rootOutput: string | undefined;
+    let lastOutput: string | undefined;
+    for (const row of traceRows) {
+      const type = String(field(row, "type") ?? "").toUpperCase();
+      const start = isoMs(field(row, "start_time", "startTime"));
+      const end = isoMs(field(row, "end_time", "endTime"));
+      // latency fields flipped units on newer integrations; timestamps did not
+      const latency = start !== undefined && end !== undefined && end > start ? end - start : undefined;
+      const failed = field(row, "level") === "ERROR";
+      const errorText = failed
+        ? String(field(row, "status_message", "statusMessage") ?? "error")
+        : undefined;
+      if (failed) {
+        run.status = "error";
+        if (!run.error) run.error = errorText;
+      }
+      if (run.startTs === undefined && start !== undefined) run.startTs = start;
+
+      if (type === "GENERATION" || type === "EMBEDDING") {
+        const model = String(field(row, "provided_model_name", "providedModelName", "model") ?? "unknown");
+        const event: LlmCallEvent = { type: "llm_call", run: "", model };
+        const usage = field(row, "usage_details", "usageDetails", "usage");
+        if (isRecord(usage)) {
+          const input = toNum(usage.input) ?? toNum(usage.promptTokens);
+          const output = toNum(usage.output) ?? toNum(usage.completionTokens);
+          if (input !== undefined || output !== undefined) {
+            event.tokens = {};
+            if (input !== undefined) event.tokens.input = input;
+            if (output !== undefined) event.tokens.output = output;
+            tally.sawTokens = true;
+          }
+        }
+        // blob exports serialise prices as quoted decimal strings
+        let cost = toNum(field(row, "total_cost", "totalCost", "calculatedTotalCost"));
+        if (cost === undefined) {
+          const details = field(row, "cost_details", "costDetails");
+          if (isRecord(details)) {
+            const parts = Object.values(details).map(toNum).filter((n): n is number => n !== undefined);
+            if (parts.length) cost = parts.reduce((t, n) => t + n, 0);
+          }
+        }
+        if (cost !== undefined) {
+          event.cost_usd = cost;
+          tally.sawCost = true;
+        }
+        if (latency !== undefined) event.latency_ms = latency;
+        if (errorText) event.error = errorText;
+        run.calls.push({ startKey: start ?? 0, event });
+      } else if (type === "TOOL" || (type === "SPAN" && !isRoot(row))) {
+        // older SDKs logged tool use as plain nested SPANs
+        const event: ToolCallEvent = { type: "tool_call", run: "", name: String(field(row, "name") ?? "tool") };
+        const args = parseArgs(field(row, "input"));
+        if (args) {
+          event.args = args;
+          tally.sawArgs = true;
+        }
+        if (latency !== undefined) event.latency_ms = latency;
+        if (errorText) event.error = errorText;
+        run.calls.push({ startKey: start ?? 0, event });
+      }
+
+      const output = field(row, "output");
+      if (output !== undefined && type !== "TOOL" && !(type === "SPAN" && !isRoot(row))) {
+        const content = contentOf(output);
+        if (isRoot(row)) rootOutput = content;
+        lastOutput = content;
+      }
+    }
+    const output = rootOutput ?? lastOutput;
+    if (output !== undefined) {
+      run.output = output;
+      tally.sawOutput = true;
+    }
+    importedRuns.push(run);
+  }
+
+  return assemble(importedRuns, tally, options);
 }
 
 // ---------------------------------------------------------------------------
