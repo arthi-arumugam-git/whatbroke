@@ -18,6 +18,8 @@ Text diffs can't see this. Your agent can say "your subscription is cancelled" w
 
 That's a real failure mode from swapping to a cheaper model. The agent got 75% cheaper, kept passing the vibe check, and stopped actually cancelling subscriptions. It also started refunding $425 instead of $42.50.
 
+For a version you can reproduce on a laptop with ollama, see the case study: [what a 3x smaller model changed in a tool-calling agent](docs/findings/llama32-3b-vs-1b.md).
+
 ## Install
 
 ```
