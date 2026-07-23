@@ -1,16 +1,23 @@
 {
   "name": "whatbroke-cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Diff your AI agent's behavior between two runs. Swap a model, change a prompt, run whatbroke, see exactly what changed.",
   "keywords": [
     "ai-agents",
+    "agents",
     "llm",
     "evals",
+    "llm-evaluation",
+    "agent-testing",
     "regression-testing",
     "diff",
     "tracing",
+    "tool-calls",
+    "observability",
+    "cli",
     "openai",
-    "anthropic"
+    "anthropic",
+    "ollama"
   ],
   "license": "MIT",
   "author": "Arthi Arumugam",
