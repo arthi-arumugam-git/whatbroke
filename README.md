@@ -62,7 +62,7 @@ Exit code is 1 when something breaking shows up, so you can put it straight into
 - run: npx whatbroke-cli diff traces/baseline.jsonl traces/current.jsonl --md >> "$GITHUB_STEP_SUMMARY"
 ```
 
-`--fail-on warning` if you want stricter gates, `--fail-on never` if you just want the report.
+`--fail-on changed` if you want stricter gates, `--fail-on never` if you just want the report.
 
 ## Flaky agents
 
@@ -126,6 +126,42 @@ rec.end("ok");
 
 `rec.wrapAnthropic(client)` does the same for the Anthropic SDK. For everything else there's `rec.llmCall()`, `rec.toolCall()`, `rec.output()`, `rec.end()`, or just write the JSONL yourself.
 
+## Import existing traces
+
+Already tracing your agent? `whatbroke import` converts what you have into diffable JSONL, no re-recording needed:
+
+```
+whatbroke import traces-export.json
+whatbroke diff baseline.whatbroke.jsonl current.whatbroke.jsonl
+```
+
+The format is detected from the file. `--format otel|langfuse|langsmith` forces it, `--run <name>` sets the run name, `-o` picks the output path. The import prints what the source didn't carry (cost, tool args) so you know which findings can't show up.
+
+### OpenTelemetry
+
+Feed it an OTLP JSON span export, like what the collector's `file` exporter writes. Anything emitting the GenAI semantic conventions works, including Vercel AI SDK telemetry, Claude Code, and OpenLLMetry. One caveat: tool arguments and model outputs are opt-in attributes in most instrumentations. If they weren't captured, the import says so and those comparisons stay empty.
+
+### Langfuse
+
+Export observations from the Langfuse UI as JSON, or take a scheduled blob export as JSONL, and import the file. Langfuse is the only source with first-class cost data, so cost regressions actually show up here. Latency is recomputed from timestamps because the exported latency field changed units between integration versions.
+
+### LangSmith
+
+There is no flat-file export on the free tier, so dump your project through the SDK first:
+
+```python
+from langsmith import Client
+import json
+
+with open("runs.jsonl", "w") as f:
+    for run in Client().list_runs(project_name="my-project"):
+        f.write(json.dumps(run.dict(), default=str) + "\n")
+```
+
+Then `whatbroke import runs.jsonl`.
+
+In CI, add `--fail-on changed` to the diff and argument drift fails the build along with the breaking findings.
+
 ## Options
 
 ```
@@ -133,10 +169,16 @@ whatbroke diff <before.jsonl> <after.jsonl>
 
   --json              machine-readable output
   --md                markdown output, drop it in a PR comment
-  --fail-on <level>   exit 1 on: breaking (default), warning, never
+  --fail-on <level>   exit 1 on: breaking (default), changed, never
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+whatbroke import <trace-export>
+
+  -o, --out <file>    converted trace to write (default: <input>.whatbroke.jsonl)
+  --format <name>     otel | langfuse | langsmith (default: detect from the file)
+  --run <name>        base run name (default: derived from the source)
 
 whatbroke record --out <trace.jsonl>
 
@@ -155,7 +197,7 @@ Deterministic, offline, no API keys, no accounts. Your traces never leave your m
 
 - [x] Multi-sample runs, so flaky behavior shows up as a flap rate instead of noise
 - [x] Proxy capture (`whatbroke record`), traces without touching your code
-- [ ] Importers for LangSmith and Langfuse trace exports
+- [x] Importers for OpenTelemetry, Langfuse, and LangSmith traces (`whatbroke import`)
 - [ ] Python recorder
 - [ ] `whatbroke watch` to auto-diff against a baseline while you iterate
 - [ ] Semantic output comparison (opt-in, bring your own key)
