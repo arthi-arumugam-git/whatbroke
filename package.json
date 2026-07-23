@@ -1,6 +1,6 @@
 {
   "name": "whatbroke-cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Diff your AI agent's behavior between two runs. Swap a model, change a prompt, run whatbroke, see exactly what changed.",
   "keywords": [
     "ai-agents",
@@ -12,6 +12,9 @@
     "regression-testing",
     "diff",
     "tracing",
+    "opentelemetry",
+    "langfuse",
+    "langsmith",
     "tool-calls",
     "observability",
     "cli",
