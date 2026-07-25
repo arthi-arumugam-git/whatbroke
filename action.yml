@@ -1,0 +1,55 @@
+name: "whatbroke"
+description: "Fail the job when your AI agent's behavior changes: diff two trace files, or check a trace against a behavior contract."
+branding:
+  icon: "alert-triangle"
+  color: "red"
+inputs:
+  before:
+    description: "Baseline trace (JSONL). Use together with `after` to diff."
+    required: false
+    default: ""
+  after:
+    description: "New trace (JSONL) to diff against `before`."
+    required: false
+    default: ""
+  trace:
+    description: "Trace (JSONL) to check against `contract`."
+    required: false
+    default: ""
+  contract:
+    description: "Behavior contract (JSON) to hold `trace` to."
+    required: false
+    default: ""
+  fail-on:
+    description: "For diff: breaking (default), changed, never. For check: violation (default), never."
+    required: false
+    default: ""
+  version:
+    description: "whatbroke-cli version to run."
+    required: false
+    default: "latest"
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      env:
+        WB_BEFORE: ${{ inputs.before }}
+        WB_AFTER: ${{ inputs.after }}
+        WB_TRACE: ${{ inputs.trace }}
+        WB_CONTRACT: ${{ inputs.contract }}
+        WB_FAIL_ON: ${{ inputs.fail-on }}
+        WB_VERSION: ${{ inputs.version }}
+      run: |
+        set -o pipefail
+        if [ -n "$WB_BEFORE" ] && [ -n "$WB_AFTER" ]; then
+          args=(diff "$WB_BEFORE" "$WB_AFTER" --md)
+        elif [ -n "$WB_TRACE" ] && [ -n "$WB_CONTRACT" ]; then
+          args=(check "$WB_TRACE" --contract "$WB_CONTRACT" --md)
+        else
+          echo "whatbroke action needs either before+after (diff) or trace+contract (check)" >&2
+          exit 2
+        fi
+        if [ -n "$WB_FAIL_ON" ]; then
+          args+=(--fail-on "$WB_FAIL_ON")
+        fi
+        npx -y "whatbroke-cli@$WB_VERSION" "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"

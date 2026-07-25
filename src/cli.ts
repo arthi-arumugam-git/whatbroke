@@ -2,6 +2,14 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import pc from "picocolors";
+import {
+  checkTrace,
+  contractHash,
+  generateContract,
+  parseContract,
+  renderCheckMarkdown,
+  renderCheckTerminal,
+} from "./contract.js";
 import { diffTraces } from "./diff.js";
 import { importTrace } from "./import.js";
 import type { ImportFormat } from "./import.js";
@@ -14,6 +22,8 @@ const HELP = `whatbroke - diff your AI agent's behavior between two runs
 
 usage:
   whatbroke diff <before.jsonl> <after.jsonl> [options]
+  whatbroke check <trace.jsonl> --contract <contract.json> [options]
+  whatbroke check <trace.jsonl> --init [-o contract.json]
   whatbroke import <trace-export> [options]
   whatbroke record --out <trace.jsonl> [options]
 
@@ -24,6 +34,23 @@ diff options:
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+check options:
+  --contract <file>   contract to check the trace against
+  --init              write a starter contract learned from the trace instead
+  -o, --out <file>    where --init writes it (default: whatbroke.contract.json)
+  --json              machine-readable output
+  --md                markdown output
+  --fail-on <level>   exit 1 on: violation (default), never
+
+check asserts behavior against one trace, no baseline needed: tools that must
+or must never be called, call order, cost/latency/step budgets, output content.
+Rules live in a JSON contract you commit next to your code:
+  {"rules": {"must_call": ["lookup_order"], "must_not_call": ["delete_account"],
+             "max_cost_usd": 0.05}}
+Record each scenario a few times (name#1, name#2, ...) and violations report a
+per-sample rate. The report prints the contract hash so CI logs show exactly
+which version of the rules a run was held to.
 
 import options:
   -o, --out <file>    converted trace to write (default: <input>.whatbroke.jsonl)
@@ -79,6 +106,10 @@ function main(): void {
   }
   if (command === "import") {
     runImport(argv.slice(1));
+    return;
+  }
+  if (command === "check") {
+    runCheck(argv.slice(1));
     return;
   }
   if (command !== "diff") fail(`unknown command: ${command}`);
@@ -161,6 +192,95 @@ function main(): void {
     (failOn === "breaking" && result.breaking > 0) ||
     (failOn === "warning" && (result.breaking > 0 || result.warnings > 0));
   process.exit(shouldFail ? 1 : 0);
+}
+
+function runCheck(argv: string[]): void {
+  const positional: string[] = [];
+  let contractPath = "";
+  let init = false;
+  let out = "";
+  let format: "terminal" | "json" | "md" = "terminal";
+  let failOn: "violation" | "never" = "violation";
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--contract":
+        contractPath = argv[++i] ?? "";
+        break;
+      case "--init":
+        init = true;
+        break;
+      case "-o":
+      case "--out":
+        out = argv[++i] ?? "";
+        break;
+      case "--json":
+        format = "json";
+        break;
+      case "--md":
+        format = "md";
+        break;
+      case "--fail-on": {
+        const value = argv[++i];
+        if (value !== "violation" && value !== "never") {
+          fail(`--fail-on must be violation or never`);
+        }
+        failOn = value;
+        break;
+      }
+      default:
+        if (arg.startsWith("-")) fail(`unknown option: ${arg}`);
+        positional.push(arg);
+    }
+  }
+
+  if (positional.length !== 1) {
+    fail("check needs exactly one trace file: whatbroke check trace.jsonl --contract contract.json");
+  }
+
+  let runs;
+  try {
+    runs = loadTrace(positional[0]);
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+
+  if (init) {
+    const contract = generateContract(runs, basename(positional[0]));
+    const target = out || "whatbroke.contract.json";
+    writeFileSync(target, JSON.stringify(contract, null, 2) + "\n");
+    console.log(`wrote ${target} from ${runs.size} recorded run${runs.size === 1 ? "" : "s"}`);
+    console.log(pc.dim(`  review the budgets, then: whatbroke check <trace.jsonl> --contract ${target}`));
+    return;
+  }
+
+  if (!contractPath) fail("check needs --contract <contract.json> (or --init to generate one)");
+
+  let text: string;
+  try {
+    text = readFileSync(contractPath, "utf8");
+  } catch {
+    fail(`could not read contract file: ${contractPath}`);
+  }
+
+  let result;
+  try {
+    const contract = parseContract(text);
+    result = checkTrace(runs, contract, contractHash(text));
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+
+  if (format === "json") {
+    console.log(JSON.stringify(result, null, 2));
+  } else if (format === "md") {
+    console.log(renderCheckMarkdown(result));
+  } else {
+    console.log(renderCheckTerminal(result));
+  }
+
+  process.exit(failOn === "violation" && !result.passed ? 1 : 0);
 }
 
 function runImport(argv: string[]): void {

@@ -164,6 +164,64 @@ Then `whatbroke import runs.jsonl`.
 
 In CI, add `--fail-on changed` to the diff and argument drift fails the build along with the breaking findings.
 
+## Behavior contracts
+
+Diffing needs two traces. Sometimes you just want to state what must always be true and check every run against it:
+
+```
+whatbroke check trace.jsonl --contract whatbroke.contract.json
+```
+
+A contract is a JSON file you commit next to your code:
+
+```json
+{
+  "name": "refund flow guardrails",
+  "rules": {
+    "must_call": ["lookup_order", "refund_payment"],
+    "must_not_call": ["delete_account"],
+    "call_order": [["lookup_order", "refund_payment"]],
+    "max_cost_usd": 0.05,
+    "max_latency_ms": 30000,
+    "output_includes": ["refund"],
+    "no_tool_errors": true
+  }
+}
+```
+
+`rules` applies to every run; a `runs` map overrides per scenario. Don't want to write one by hand? Learn it from a good baseline:
+
+```
+whatbroke check baseline.jsonl --init
+```
+
+That writes a starter contract with the tools every sample called, cost/latency budgets at observed-max plus 50%, and expected status. Review the budgets, commit it, done.
+
+The report prints the contract's hash, so a CI log always shows exactly which version of the rules a run was held to — when a check starts failing you can tell "the agent changed" apart from "someone changed the contract". Sampled traces (`name#1`, `name#2`, ...) report a violation rate per rule instead of a flat fail.
+
+Exit code 1 on any violation (`--fail-on never` to disable), `--md` and `--json` output like everything else.
+
+## GitHub Action
+
+Both commands run as a composite action, with the markdown report landing in the job summary:
+
+```yaml
+- uses: arthi-arumugam-git/whatbroke@main
+  with:
+    trace: traces/nightly.jsonl
+    contract: whatbroke.contract.json
+```
+
+or for a before/after diff:
+
+```yaml
+- uses: arthi-arumugam-git/whatbroke@main
+  with:
+    before: traces/baseline.jsonl
+    after: traces/current.jsonl
+    fail-on: changed
+```
+
 ## Options
 
 ```
@@ -175,6 +233,15 @@ whatbroke diff <before.jsonl> <after.jsonl>
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+whatbroke check <trace.jsonl>
+
+  --contract <file>   contract to check the trace against
+  --init              write a starter contract learned from the trace instead
+  -o, --out <file>    where --init writes it (default: whatbroke.contract.json)
+  --json              machine-readable output
+  --md                markdown output
+  --fail-on <level>   exit 1 on: violation (default), never
 
 whatbroke import <trace-export>
 
@@ -200,6 +267,8 @@ Deterministic, offline, no API keys, no accounts. Your traces never leave your m
 - [x] Multi-sample runs, so flaky behavior shows up as a flap rate instead of noise
 - [x] Proxy capture (`whatbroke record`), traces without touching your code
 - [x] Importers for OpenTelemetry, Langfuse, and LangSmith traces (`whatbroke import`)
+- [x] Behavior contracts (`whatbroke check`), guardrails against a single trace with no baseline
+- [x] GitHub Action
 - [ ] Python recorder
 - [ ] `whatbroke watch` to auto-diff against a baseline while you iterate
 - [ ] Semantic output comparison (opt-in, bring your own key)

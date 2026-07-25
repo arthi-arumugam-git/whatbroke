@@ -134,3 +134,54 @@ describe("cli", () => {
     expect(result.stderr).toContain("--out");
   });
 });
+
+describe("cli check", () => {
+  it("generates a contract with --init and then holds against the same trace", () => {
+    const dir = mkdtempSync(join(tmpdir(), "whatbroke-check-"));
+    const contractPath = join(dir, "contract.json");
+    const init = cli(["check", BEFORE, "--init", "-o", contractPath]);
+    expect(init.code).toBe(0);
+    expect(init.stdout).toContain("wrote");
+
+    const check = cli(["check", BEFORE, "--contract", contractPath]);
+    expect(check.code).toBe(0);
+    expect(strip(check.stdout)).toContain("contract holds");
+  });
+
+  it("exits 1 when the after-trace violates the baseline contract", () => {
+    const dir = mkdtempSync(join(tmpdir(), "whatbroke-check-"));
+    const contractPath = join(dir, "contract.json");
+    cli(["check", BEFORE, "--init", "-o", contractPath]);
+
+    const check = cli(["check", AFTER, "--contract", contractPath]);
+    expect(check.code).toBe(1);
+    const out = strip(check.stdout);
+    expect(out).toContain("VIOLATED");
+    expect(out).toContain("cancel_subscription");
+  });
+
+  it("exits 0 on violations with --fail-on never and emits markdown", () => {
+    const dir = mkdtempSync(join(tmpdir(), "whatbroke-check-"));
+    const contractPath = join(dir, "contract.json");
+    cli(["check", BEFORE, "--init", "-o", contractPath]);
+
+    const check = cli(["check", AFTER, "--contract", contractPath, "--md", "--fail-on", "never"]);
+    expect(check.code).toBe(0);
+    expect(check.stdout).toContain("## whatbroke contract check");
+  });
+
+  it("exits 2 without --contract or --init", () => {
+    const result = cli(["check", BEFORE]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--contract");
+  });
+
+  it("exits 2 on a broken contract file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "whatbroke-check-"));
+    const contractPath = join(dir, "bad.json");
+    writeFileSync(contractPath, '{"rules":{"must_cal":["x"]}}');
+    const result = cli(["check", BEFORE, "--contract", contractPath]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("not a known rule");
+  });
+});

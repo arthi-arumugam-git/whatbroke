@@ -1,3 +1,12 @@
+export {
+  checkTrace,
+  contractHash,
+  generateContract,
+  parseContract,
+  renderCheckMarkdown,
+  renderCheckTerminal,
+} from "./contract.js";
+export type { CheckResult, Contract, ContractRules, Violation } from "./contract.js";
 export { diffTraces } from "./diff.js";
 export { detectFormat, importTrace } from "./import.js";
 export type { ImportFormat, ImportOptions, ImportResult } from "./import.js";
