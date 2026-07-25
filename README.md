@@ -20,6 +20,8 @@ That's a real diff from swapping to a 3x smaller model, recorded on a laptop wit
 
 For the full story and the commands to reproduce it, see the case study: [what a 3x smaller model changed in a tool-calling agent](docs/findings/llama32-3b-vs-1b.md). There's a second one on swapping vendors at the same size: [a same-size vendor swap changed more than the 3x downgrade](docs/findings/llama32-3b-vs-qwen25-3b.md). And if you're wondering how this fits next to promptfoo, LangSmith, or your eval suite: [when to use what](docs/when-to-use-what.md).
 
+Swapping your agent to a model that came out this week? Start here: [the model swap checklist](docs/model-swap-checklist.md).
+
 ## Install
 
 ```
