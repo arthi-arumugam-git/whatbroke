@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whatbroke-recorder"
+version = "0.1.0"
+description = "Record AI agent traces as whatbroke JSONL. Diff two runs with the whatbroke CLI and see exactly what changed."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Arthi Arumugam" }]
+requires-python = ">=3.9"
+dependencies = []
+keywords = [
+  "ai-agents",
+  "llm",
+  "evals",
+  "agent-testing",
+  "regression-testing",
+  "tracing",
+  "tool-calls",
+  "observability",
+  "openai",
+  "anthropic",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+Homepage = "https://github.com/arthi-arumugam-git/whatbroke"
+Repository = "https://github.com/arthi-arumugam-git/whatbroke"
+Issues = "https://github.com/arthi-arumugam-git/whatbroke/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["whatbroke"]
