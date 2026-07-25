@@ -109,7 +109,7 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:4141 node my-agent.js
 如果你在 Node 里，SDK 可以包住现有客户端，自动录制一切：
 
 ```ts
-import { Recorder } from "whatbroke";
+import { Recorder } from "whatbroke-cli";
 import OpenAI from "openai";
 
 const rec = new Recorder({ file: "traces/current.jsonl", run: "refund-flow" });

@@ -109,7 +109,7 @@ ANTHROPIC_BASE_URL=http://127.0.0.1:4141 node my-agent.js
 Node라면 SDK가 기존 클라이언트를 감싸서 전부 자동으로 기록합니다:
 
 ```ts
-import { Recorder } from "whatbroke";
+import { Recorder } from "whatbroke-cli";
 import OpenAI from "openai";
 
 const rec = new Recorder({ file: "traces/current.jsonl", run: "refund-flow" });

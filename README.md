@@ -113,7 +113,7 @@ Every LLM call, tool call, and final answer lands in the trace. Streaming works,
 If you're in Node, the SDK wraps your existing client and records everything automatically:
 
 ```ts
-import { Recorder } from "whatbroke";
+import { Recorder } from "whatbroke-cli";
 import OpenAI from "openai";
 
 const rec = new Recorder({ file: "traces/current.jsonl", run: "refund-flow" });
@@ -127,6 +127,23 @@ rec.end("ok");
 ```
 
 `rec.wrapAnthropic(client)` does the same for the Anthropic SDK. For everything else there's `rec.llmCall()`, `rec.toolCall()`, `rec.output()`, `rec.end()`, or just write the JSONL yourself.
+
+In Python it's the same shape (`pip install whatbroke-recorder`, zero dependencies):
+
+```python
+from whatbroke import Recorder
+from openai import OpenAI
+
+rec = Recorder("traces/current.jsonl", run="refund-flow")
+client = rec.wrap_openai(OpenAI())
+
+run_my_agent(client)  # llm calls and tool calls are captured
+
+rec.output(final_answer)
+rec.end("ok")
+```
+
+`rec.wrap_anthropic(client)` works too, sync and async clients both. Traces recorded from Python, Node, and the proxy all diff against each other.
 
 ## Import existing traces
 
@@ -269,7 +286,7 @@ Deterministic, offline, no API keys, no accounts. Your traces never leave your m
 - [x] Importers for OpenTelemetry, Langfuse, and LangSmith traces (`whatbroke import`)
 - [x] Behavior contracts (`whatbroke check`), guardrails against a single trace with no baseline
 - [x] GitHub Action
-- [ ] Python recorder
+- [x] Python recorder (`pip install whatbroke-recorder`), same trace format from Python
 - [ ] `whatbroke watch` to auto-diff against a baseline while you iterate
 - [ ] Semantic output comparison (opt-in, bring your own key)
 

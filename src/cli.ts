@@ -82,7 +82,7 @@ trace format: one JSON event per line
   {"type":"output","run":"refund-flow","content":"Refund issued."}
   {"type":"run_end","run":"refund-flow","status":"ok"}
 
-you can also record with the SDK (import { Recorder } from "whatbroke") or write
+you can also record with the SDK (import { Recorder } from "whatbroke-cli") or write
 the JSONL yourself from any language. Full docs: https://github.com/arthi-arumugam-git/whatbroke
 `;
 

@@ -109,7 +109,7 @@ Cada llamada al LLM, cada llamada a herramienta y la respuesta final acaban en l
 Si estás en Node, el SDK envuelve tu cliente existente y lo graba todo automáticamente:
 
 ```ts
-import { Recorder } from "whatbroke";
+import { Recorder } from "whatbroke-cli";
 import OpenAI from "openai";
 
 const rec = new Recorder({ file: "traces/current.jsonl", run: "refund-flow" });

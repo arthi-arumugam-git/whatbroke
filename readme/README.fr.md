@@ -109,7 +109,7 @@ Chaque appel LLM, chaque appel d'outil et la réponse finale atterrissent dans l
 Si vous êtes sous Node, le SDK enveloppe votre client existant et enregistre tout automatiquement :
 
 ```ts
-import { Recorder } from "whatbroke";
+import { Recorder } from "whatbroke-cli";
 import OpenAI from "openai";
 
 const rec = new Recorder({ file: "traces/current.jsonl", run: "refund-flow" });

@@ -109,7 +109,7 @@ Jeder LLM-Aufruf, jeder Tool-Aufruf und die finale Antwort landen im Trace. Stre
 Unter Node wickelt das SDK deinen bestehenden Client ein und zeichnet alles automatisch auf:
 
 ```ts
-import { Recorder } from "whatbroke";
+import { Recorder } from "whatbroke-cli";
 import OpenAI from "openai";
 
 const rec = new Recorder({ file: "traces/current.jsonl", run: "refund-flow" });
