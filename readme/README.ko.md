@@ -124,6 +124,17 @@ rec.end("ok");
 
 `rec.wrapAnthropic(client)`는 Anthropic SDK에 같은 일을 합니다. 그 외에는 `rec.llmCall()`, `rec.toolCall()`, `rec.output()`, `rec.end()`가 있고, JSONL을 직접 써도 됩니다.
 
+## 동작 계약(behavior contracts)
+
+`whatbroke check`는 베이스라인 없이 트레이스 하나를 규칙에 대해 검증합니다: 반드시 호출해야 하거나 절대 호출하면 안 되는 도구, 호출 순서, 비용·지연 예산, 출력 내용.
+
+```
+whatbroke check trace.jsonl --contract whatbroke.contract.json
+whatbroke check baseline.jsonl --init   # 좋은 베이스라인에서 초기 계약을 학습
+```
+
+리포트에 계약의 해시가 찍히므로 CI 로그만 봐도 어떤 버전의 규칙으로 검증했는지 알 수 있습니다. 위반이 있으면 종료 코드 1. GitHub Action으로도 쓸 수 있습니다 (`uses: arthi-arumugam-git/whatbroke@main`).
+
 ## 옵션
 
 ```

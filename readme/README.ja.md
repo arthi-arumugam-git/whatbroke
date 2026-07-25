@@ -124,6 +124,17 @@ rec.end("ok");
 
 `rec.wrapAnthropic(client)` はAnthropic SDKに対して同じことをします。それ以外には `rec.llmCall()`、`rec.toolCall()`、`rec.output()`、`rec.end()` があるし、JSONLを自分で書いても構いません。
 
+## 振る舞いコントラクト
+
+`whatbroke check` はベースラインなしで、1本のトレースをルールに照らして検証します: 必ず呼ぶべき・決して呼んではいけないツール、呼び出し順序、コストとレイテンシの予算、出力の内容。
+
+```
+whatbroke check trace.jsonl --contract whatbroke.contract.json
+whatbroke check baseline.jsonl --init   # 良いベースラインから初期コントラクトを学習
+```
+
+レポートにはコントラクトのハッシュが載るので、CIログを見ればどのバージョンのルールで検証したかが分かります。違反があれば終了コード1。GitHub Action としても使えます (`uses: arthi-arumugam-git/whatbroke@main`)。
+
 ## オプション
 
 ```

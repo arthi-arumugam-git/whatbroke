@@ -124,6 +124,17 @@ rec.end("ok");
 
 `rec.wrapAnthropic(client)` делает то же для Anthropic SDK. На все остальные случаи есть `rec.llmCall()`, `rec.toolCall()`, `rec.output()`, `rec.end()`, либо пишите JSONL сами.
 
+## Поведенческие контракты
+
+`whatbroke check` проверяет одну трассу на соответствие правилам, без базовой трассы: какие инструменты обязаны вызываться или не должны вызываться никогда, порядок вызовов, бюджеты стоимости и задержки, содержимое вывода.
+
+```
+whatbroke check trace.jsonl --contract whatbroke.contract.json
+whatbroke check baseline.jsonl --init   # выучить стартовый контракт по хорошей базовой трассе
+```
+
+В отчёте указывается хеш контракта, поэтому в логах CI видно, по какой версии правил проверялся запуск. Код выхода 1 при любом нарушении. Доступно и как GitHub Action (`uses: arthi-arumugam-git/whatbroke@main`).
+
 ## Опции
 
 ```

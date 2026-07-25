@@ -124,6 +124,17 @@ rec.end("ok");
 
 `rec.wrapAnthropic(client)` 对 Anthropic SDK 同理。其他情况可以用 `rec.llmCall()`、`rec.toolCall()`、`rec.output()`、`rec.end()`，或者干脆自己写 JSONL。
 
+## 行为契约
+
+`whatbroke check` 无需基线，用一条 trace 对照固定规则做检查：哪些工具必须调用、哪些绝不能调用、调用顺序、成本与延迟预算、输出内容。
+
+```
+whatbroke check trace.jsonl --contract whatbroke.contract.json
+whatbroke check baseline.jsonl --init   # 从一条好的基线学出初始契约
+```
+
+报告会带上契约的哈希，CI 日志里能看出每次运行是按哪个版本的规则检查的。有任何违规就以退出码 1 结束。也可以作为 GitHub Action 使用（`uses: arthi-arumugam-git/whatbroke@main`）。
+
 ## 选项
 
 ```
