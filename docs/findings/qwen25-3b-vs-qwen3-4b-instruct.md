@@ -43,11 +43,12 @@ Upgrades are not monotonic. qwen3 fixed the two scariest findings of the last st
 ## Run it yourself
 
 ```
+git clone https://github.com/arthi-arumugam-git/whatbroke && cd whatbroke
 ollama pull qwen2.5:3b && ollama pull qwen3:4b-instruct
 npm install -g whatbroke-cli
-node agent.mjs qwen2.5:3b traces/before.jsonl 3
-node agent.mjs qwen3:4b-instruct traces/after.jsonl 3
+node examples/agent.mjs --model qwen2.5:3b --out traces/before.jsonl --samples 3
+node examples/agent.mjs --model qwen3:4b-instruct --out traces/after.jsonl --samples 3
 whatbroke diff traces/before.jsonl traces/after.jsonl
 ```
 
-Same 190-line agent script as the earlier studies, plain fetch calls against ollama's OpenAI endpoint. Everything runs offline and the traces never leave your machine.
+Same agent script as the earlier studies, [`examples/agent.mjs`](../../examples/agent.mjs), plain fetch calls against ollama's OpenAI endpoint. Everything runs offline and the traces never leave your machine.

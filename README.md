@@ -18,7 +18,11 @@ Text diffs can't see this. Your agent can say "your subscription is cancelled" w
 
 That's a real diff from swapping to a 3x smaller model, recorded on a laptop with ollama. The replies kept passing the vibe check while the model started sending its tool's own JSON schema as the tool arguments and skipping the actual cancellation call.
 
-For the full story and the commands to reproduce it, see the case study: [what a 3x smaller model changed in a tool-calling agent](docs/findings/llama32-3b-vs-1b.md). There's a second one on swapping vendors at the same size: [a same-size vendor swap changed more than the 3x downgrade](docs/findings/llama32-3b-vs-qwen25-3b.md), and a third on upgrading a generation: [the model that fixed the fake IDs also stopped issuing refunds](docs/findings/qwen25-3b-vs-qwen3-4b-instruct.md). And if you're wondering how this fits next to promptfoo, LangSmith, or your eval suite: [when to use what](docs/when-to-use-what.md).
+For the full story and the commands to reproduce it, see the case study: [what a 3x smaller model changed in a tool-calling agent](docs/findings/llama32-3b-vs-1b.md). There's a second one on swapping vendors at the same size: [a same-size vendor swap changed more than the 3x downgrade](docs/findings/llama32-3b-vs-qwen25-3b.md), and a third on upgrading a generation: [the model that fixed the fake IDs also stopped issuing refunds](docs/findings/qwen25-3b-vs-qwen3-4b-instruct.md).
+
+The fourth one changes no model at all. Same weights, same prompts, same machine, only the path the request takes: [the proxy that silently turned an agent into a chatbot](docs/findings/litellm-ollama-streaming.md). One LiteLLM route with streaming on dropped every tool call in every scenario, returned HTTP 200 and `finish_reason: "stop"`, and printed the tool call as prose to the customer.
+
+If you're wondering how this fits next to promptfoo, LangSmith, or your eval suite: [when to use what](docs/when-to-use-what.md).
 
 Swapping your agent to a model that came out this week? Start here: [the model swap checklist](docs/model-swap-checklist.md).
 

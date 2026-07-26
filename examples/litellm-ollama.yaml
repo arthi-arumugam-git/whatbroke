@@ -1,0 +1,24 @@
+# Two LiteLLM routes to the SAME local ollama model, so the only variable is
+# LiteLLM's own translation layer.
+#
+#   litellm --config litellm-ollama.yaml --port 4000
+#
+# Baseline for comparison is ollama's own OpenAI-compatible endpoint at
+# http://localhost:11434/v1, which the agent can hit directly.
+
+model_list:
+  - model_name: via-ollama-chat
+    litellm_params:
+      model: ollama_chat/qwen2.5:3b
+      api_base: http://localhost:11434
+
+  - model_name: via-ollama
+    litellm_params:
+      model: ollama/qwen2.5:3b
+      api_base: http://localhost:11434
+
+litellm_settings:
+  drop_params: false
+
+general_settings:
+  master_key: sk-local-experiment

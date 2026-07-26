@@ -6,3 +6,8 @@ __pycache__/
 *.pyc
 *.egg-info/
 python/dist/
+
+# local working files, never part of the package
+distribution/
+desktop-check.png
+traces/

@@ -64,11 +64,12 @@ Evals help, but they answer a different question. An eval scores a version again
 The whole experiment is a model pull and five commands:
 
 ```
+git clone https://github.com/arthi-arumugam-git/whatbroke && cd whatbroke
 ollama pull llama3.2:3b && ollama pull llama3.2:1b
 npm install -g whatbroke-cli
-node agent.mjs llama3.2:3b traces/before.jsonl 3
-node agent.mjs llama3.2:1b traces/after.jsonl 3
+node examples/agent.mjs --model llama3.2:3b --out traces/before.jsonl --samples 3
+node examples/agent.mjs --model llama3.2:1b --out traces/after.jsonl --samples 3
 whatbroke diff traces/before.jsonl traces/after.jsonl
 ```
 
-The agent script is 190 lines of plain fetch calls, no framework. For your own agent you do not even need the SDK: `whatbroke record` starts a local proxy, you point `OPENAI_BASE_URL` at it, and run your agent unchanged. Everything is offline and the traces never leave your machine.
+The agent script is [`examples/agent.mjs`](../../examples/agent.mjs), 332 lines of plain fetch calls, no framework and no dependencies. For your own agent you do not even need the SDK: `whatbroke record` starts a local proxy, you point `OPENAI_BASE_URL` at it, and run your agent unchanged. Everything is offline and the traces never leave your machine.

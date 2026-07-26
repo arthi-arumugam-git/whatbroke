@@ -48,11 +48,12 @@ The 3x downgrade mostly degraded behavior the agent already had. The same-size v
 ## Run it yourself
 
 ```
+git clone https://github.com/arthi-arumugam-git/whatbroke && cd whatbroke
 ollama pull llama3.2:3b && ollama pull qwen2.5:3b
 npm install -g whatbroke-cli
-node agent.mjs llama3.2:3b traces/before.jsonl 3
-node agent.mjs qwen2.5:3b traces/after.jsonl 3
+node examples/agent.mjs --model llama3.2:3b --out traces/before.jsonl --samples 3
+node examples/agent.mjs --model qwen2.5:3b --out traces/after.jsonl --samples 3
 whatbroke diff traces/before.jsonl traces/after.jsonl
 ```
 
-The agent script is the same 190 lines of plain fetch calls from the first study. Everything runs offline and the traces never leave your machine.
+The agent script is [`examples/agent.mjs`](../../examples/agent.mjs), the same one used in the first study. Everything runs offline and the traces never leave your machine.
