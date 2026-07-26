@@ -15,6 +15,8 @@ export { loadTrace, parseTrace } from "./parse.js";
 export { startProxy } from "./proxy.js";
 export { Recorder } from "./record.js";
 export { renderMarkdown, renderTerminal } from "./report.js";
+export { renderOnce, startWatch } from "./watch.js";
+export type { WatchOptions } from "./watch.js";
 export type {
   DiffOptions,
   DiffResult,

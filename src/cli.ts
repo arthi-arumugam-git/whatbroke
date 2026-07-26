@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import pc from "picocolors";
 import {
@@ -17,11 +17,13 @@ import { diffTracesSampled, hasSamples } from "./samples.js";
 import { loadTrace } from "./parse.js";
 import { startProxy } from "./proxy.js";
 import { renderMarkdown, renderTerminal } from "./report.js";
+import { startWatch } from "./watch.js";
 
 const HELP = `whatbroke - diff your AI agent's behavior between two runs
 
 usage:
   whatbroke diff <before.jsonl> <after.jsonl> [options]
+  whatbroke watch <baseline.jsonl> <current.jsonl> [options]
   whatbroke check <trace.jsonl> --contract <contract.json> [options]
   whatbroke check <trace.jsonl> --init [-o contract.json]
   whatbroke import <trace-export> [options]
@@ -34,6 +36,16 @@ diff options:
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+watch options:
+  --latency <ratio>   flag latency regressions above this ratio (default 1.5)
+  --cost <ratio>      flag cost increases above this ratio (default 1.25)
+  --no-outputs        skip comparing final outputs
+  --no-clear          do not clear the screen between renders
+
+watch keeps the diff live while you iterate: pin a baseline, point your
+recorder at the current file, and the report re-renders on every change.
+the current file does not have to exist yet. ctrl-c to stop.
 
 check options:
   --contract <file>   contract to check the trace against
@@ -110,6 +122,10 @@ function main(): void {
   }
   if (command === "check") {
     runCheck(argv.slice(1));
+    return;
+  }
+  if (command === "watch") {
+    runWatch(argv.slice(1));
     return;
   }
   if (command !== "diff") fail(`unknown command: ${command}`);
@@ -192,6 +208,59 @@ function main(): void {
     (failOn === "breaking" && result.breaking > 0) ||
     (failOn === "warning" && (result.breaking > 0 || result.warnings > 0));
   process.exit(shouldFail ? 1 : 0);
+}
+
+function runWatch(argv: string[]): void {
+  const positional: string[] = [];
+  let latencyThreshold = 1.5;
+  let costThreshold = 1.25;
+  let compareOutputs = true;
+  let clearScreen = true;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    switch (arg) {
+      case "--no-outputs":
+        compareOutputs = false;
+        break;
+      case "--no-clear":
+        clearScreen = false;
+        break;
+      case "--latency": {
+        const value = Number(argv[++i]);
+        if (!Number.isFinite(value) || value <= 0) fail(`--latency needs a positive number`);
+        latencyThreshold = value;
+        break;
+      }
+      case "--cost": {
+        const value = Number(argv[++i]);
+        if (!Number.isFinite(value) || value <= 0) fail(`--cost needs a positive number`);
+        costThreshold = value;
+        break;
+      }
+      default:
+        if (arg.startsWith("-")) fail(`unknown option: ${arg}`);
+        positional.push(arg);
+    }
+  }
+
+  if (positional.length !== 2) {
+    fail("watch needs exactly two trace files: whatbroke watch baseline.jsonl current.jsonl");
+  }
+
+  const [beforePath, afterPath] = positional;
+  if (!existsSync(beforePath)) fail(`could not read trace file: ${beforePath}`);
+  const afterDir = dirname(afterPath);
+  if (!existsSync(afterDir)) fail(`directory does not exist: ${afterDir}`);
+
+  startWatch({
+    beforePath,
+    afterPath,
+    diffOptions: { latencyThreshold, costThreshold, compareOutputs },
+    clearScreen,
+  });
+
+  process.on("SIGINT", () => process.exit(0));
 }
 
 function runCheck(argv: string[]): void {

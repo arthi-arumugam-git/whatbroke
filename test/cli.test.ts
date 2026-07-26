@@ -135,6 +135,44 @@ describe("cli", () => {
   });
 });
 
+describe("cli watch", () => {
+  it("exits 2 when given one file", () => {
+    const result = cli(["watch", BEFORE]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("exactly two trace files");
+  });
+
+  it("exits 2 on an unknown option", () => {
+    const result = cli(["watch", BEFORE, AFTER, "--json"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("unknown option");
+  });
+
+  it("exits 2 on a bogus --latency", () => {
+    const result = cli(["watch", BEFORE, AFTER, "--latency", "-1"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--latency");
+  });
+
+  it("exits 2 when the baseline is missing", () => {
+    const result = cli(["watch", "nope.jsonl", AFTER]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("could not read trace file");
+  });
+
+  it("exits 2 when the current file's directory does not exist", () => {
+    const result = cli(["watch", BEFORE, "no-such-dir/current.jsonl"]);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("directory does not exist");
+  });
+
+  it("mentions watch in help", () => {
+    const result = cli(["--help"]);
+    expect(result.stdout).toContain("whatbroke watch");
+    expect(result.stdout).toContain("--no-clear");
+  });
+});
+
 describe("cli check", () => {
   it("generates a contract with --init and then holds against the same trace", () => {
     const dir = mkdtempSync(join(tmpdir(), "whatbroke-check-"));

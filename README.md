@@ -222,6 +222,16 @@ The report prints the contract's hash, so a CI log always shows exactly which ve
 
 Exit code 1 on any violation (`--fail-on never` to disable), `--md` and `--json` output like everything else.
 
+## Watch mode
+
+Iterating on a prompt means running the same diff over and over. `whatbroke watch` runs it for you: pin a baseline, point your recorder at the current trace, and every time the file changes the terminal re-renders the diff.
+
+```
+whatbroke watch traces/baseline.jsonl traces/current.jsonl
+```
+
+The current file doesn't have to exist yet; the first diff appears when it does. Half-written lines are fine too, the watcher waits for writes to settle and keeps the last good report on screen instead of flashing an error. Ctrl-c stops it, `--no-clear` preserves your scrollback.
+
 ## GitHub Action
 
 Both commands run as a composite action, with the markdown report landing in the job summary:
@@ -254,6 +264,13 @@ whatbroke diff <before.jsonl> <after.jsonl>
   --latency <ratio>   flag latency regressions above this ratio (default 1.5)
   --cost <ratio>      flag cost increases above this ratio (default 1.25)
   --no-outputs        skip comparing final outputs
+
+whatbroke watch <baseline.jsonl> <current.jsonl>
+
+  --latency <ratio>   flag latency regressions above this ratio (default 1.5)
+  --cost <ratio>      flag cost increases above this ratio (default 1.25)
+  --no-outputs        skip comparing final outputs
+  --no-clear          do not clear the screen between renders
 
 whatbroke check <trace.jsonl>
 
@@ -291,7 +308,7 @@ Deterministic, offline, no API keys, no accounts. Your traces never leave your m
 - [x] Behavior contracts (`whatbroke check`), guardrails against a single trace with no baseline
 - [x] GitHub Action
 - [x] Python recorder (`pip install whatbroke-recorder`), same trace format from Python
-- [ ] `whatbroke watch` to auto-diff against a baseline while you iterate
+- [x] `whatbroke watch` to auto-diff against a baseline while you iterate
 - [ ] Semantic output comparison (opt-in, bring your own key)
 
 Issues and PRs welcome. If whatbroke caught something silently breaking in your agent, I'd genuinely love to hear about it.
