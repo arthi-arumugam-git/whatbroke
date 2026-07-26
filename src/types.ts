@@ -15,6 +15,7 @@ export interface LlmCallEvent {
   cost_usd?: number;
   stop_reason?: string;
   error?: string;
+  source?: Record<string, unknown>;
 }
 
 export interface ToolCallEvent {
@@ -23,8 +24,10 @@ export interface ToolCallEvent {
   ts?: number;
   name: string;
   args?: Record<string, unknown>;
+  result?: string;
   latency_ms?: number;
   error?: string;
+  source?: Record<string, unknown>;
 }
 
 export interface OutputEvent {
@@ -32,6 +35,7 @@ export interface OutputEvent {
   run: string;
   ts?: number;
   content: string;
+  source?: Record<string, unknown>;
 }
 
 export interface RunEndEvent {
@@ -76,6 +80,7 @@ export interface Finding {
     | "tool_removed"
     | "tool_added"
     | "tool_args_changed"
+    | "tool_result_changed"
     | "tool_reordered"
     | "tool_error"
     | "output_changed"

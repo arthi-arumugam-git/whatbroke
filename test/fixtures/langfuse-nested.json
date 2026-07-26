@@ -1,0 +1,66 @@
+[
+  {
+    "id": "ob_root",
+    "trace_id": "tr_n1",
+    "trace_name": "nested-agent",
+    "type": "SPAN",
+    "name": "agent",
+    "start_time": "2026-07-20T10:00:00.000Z",
+    "end_time": "2026-07-20T10:00:03.000Z",
+    "output": "All done.",
+    "level": "DEFAULT",
+    "tags": ["prod"],
+    "environment": "production",
+    "release": "v1.2.0",
+    "version": "3",
+    "session_id": "sess_77"
+  },
+  {
+    "id": "ob_gen",
+    "trace_id": "tr_n1",
+    "trace_name": "nested-agent",
+    "parent_observation_id": "ob_root",
+    "type": "GENERATION",
+    "name": "chat",
+    "start_time": "2026-07-20T10:00:00.100Z",
+    "end_time": "2026-07-20T10:00:01.100Z",
+    "provided_model_name": "gpt-4o",
+    "usage_details": { "input": 10, "output": 5 },
+    "level": "DEFAULT"
+  },
+  {
+    "id": "ob_t1",
+    "trace_id": "tr_n1",
+    "trace_name": "nested-agent",
+    "parent_observation_id": "ob_gen",
+    "type": "TOOL",
+    "name": "get_weather",
+    "start_time": "2026-07-20T10:00:01.200Z",
+    "end_time": "2026-07-20T10:00:01.500Z",
+    "input": { "location": "Paris" },
+    "output": { "temp_c": 14 },
+    "level": "DEFAULT"
+  },
+  {
+    "id": "ob_t1",
+    "trace_id": "tr_n1",
+    "trace_name": "nested-agent",
+    "parent_observation_id": "ob_gen",
+    "type": "TOOL",
+    "name": "get_weather",
+    "start_time": "2026-07-20T10:00:01.200Z",
+    "end_time": "2026-07-20T10:00:01.500Z",
+    "input": { "location": "Paris" },
+    "output": { "temp_c": 14 },
+    "level": "DEFAULT"
+  },
+  {
+    "id": "ob_t2",
+    "trace_id": "tr_n1",
+    "trace_name": "nested-agent",
+    "parent_observation_id": "ob_gen",
+    "type": "TOOL",
+    "name": "get_news",
+    "start_time": "2026-07-20T10:00:01.200Z"
+  }
+]

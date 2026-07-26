@@ -204,6 +204,23 @@ describe("otel import", () => {
     expect(result.toolCalls).toBe(1);
     expect(result.missing).toContain("cost");
   });
+
+  it("reports the resolved format and passes span ids through in source", () => {
+    const result = importTrace(otlp([CHAT_SPAN, TOOL_SPAN]));
+    expect(result.format).toBe("otel");
+    expect(result.schema).toBeUndefined();
+    const [llm] = only<LlmCallEvent>(result.events, "llm_call");
+    expect(llm.source).toEqual({
+      trace_id: "5B8EFFF798038103D269B633813FC60C",
+      span_id: "EEE19B7EC3C1B174",
+    });
+    const [tool] = only<ToolCallEvent>(result.events, "tool_call");
+    expect(tool.source).toEqual({
+      trace_id: "5B8EFFF798038103D269B633813FC60C",
+      span_id: "AAA19B7EC3C1B175",
+      parent_span_id: "EEE19B7EC3C1B174",
+    });
+  });
 });
 
 const LANGFUSE_GENERATION = {
@@ -338,6 +355,104 @@ describe("langfuse import", () => {
     const starts = result.events.filter((e) => e.type === "run_start").map((e) => e.run);
     expect(starts).toEqual(["flow#1", "flow#2"]);
   });
+
+  it("reports the resolved format and snake_case schema", () => {
+    const result = importTrace(JSON.stringify([LANGFUSE_GENERATION]), "langfuse");
+    expect(result.format).toBe("langfuse");
+    expect(result.schema).toBe("export rows (snake_case)");
+  });
+
+  it("reports the camelCase schema for API objects", () => {
+    const row = {
+      id: "ob_cc3",
+      traceId: "tr_88d",
+      type: "GENERATION",
+      name: "chat",
+      startTime: "2026-07-20T10:00:00.000Z",
+      model: "gpt-4o-mini",
+    };
+    const result = importTrace(JSON.stringify([row]), "langfuse");
+    expect(result.schema).toBe("API objects (camelCase)");
+  });
+
+  it("passes trace and observation ids through in source", () => {
+    const tool = {
+      id: "ob_aa1",
+      trace_id: "tr_41c",
+      parent_observation_id: "ob_9f2",
+      type: "TOOL",
+      name: "get_weather",
+      start_time: "2026-07-20T10:00:00.400Z",
+      input: { location: "Paris" },
+      level: "DEFAULT",
+    };
+    const result = importTrace(JSON.stringify([LANGFUSE_GENERATION, tool]), "langfuse");
+    const [llm] = only<LlmCallEvent>(result.events, "llm_call");
+    expect(llm.source).toEqual({ trace_id: "tr_41c", observation_id: "ob_9f2" });
+    const [call] = only<ToolCallEvent>(result.events, "tool_call");
+    expect(call.source).toEqual({
+      trace_id: "tr_41c",
+      observation_id: "ob_aa1",
+      parent_observation_id: "ob_9f2",
+    });
+  });
+});
+
+const NESTED_FIXTURE = readFileSync("test/fixtures/langfuse-nested.json", "utf8");
+
+describe("langfuse nested fixture", () => {
+  it("imports a parent SPAN with child GENERATION and TOOL as one run", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    expect(result.runs).toBe(1);
+    expect(result.llmCalls).toBe(1);
+    expect(result.toolCalls).toBe(2);
+    expect(result.events[0]).toMatchObject({ type: "run_start", run: "nested-agent" });
+  });
+
+  it("keeps parallel children that share a start_time", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    const calls = only<ToolCallEvent>(result.events, "tool_call");
+    expect(calls.map((c) => c.name)).toEqual(["get_weather", "get_news"]);
+  });
+
+  it("dedupes duplicate export records by row id with a warning", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    expect(result.toolCalls).toBe(2);
+    expect(result.warnings).toContain("1 duplicate row skipped");
+  });
+
+  it("tolerates missing optional fields on an observation", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    const news = only<ToolCallEvent>(result.events, "tool_call").find((c) => c.name === "get_news")!;
+    expect(news.args).toBeUndefined();
+    expect(news.result).toBeUndefined();
+    expect(news.latency_ms).toBeUndefined();
+  });
+
+  it("captures a TOOL observation output as the call result", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    const weather = only<ToolCallEvent>(result.events, "tool_call").find((c) => c.name === "get_weather")!;
+    expect(weather.result).toBe('{"temp_c":14}');
+  });
+
+  it("passes tags, environment, release, version, session_id into run_start meta", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    const start = result.events[0] as { meta?: Record<string, unknown> };
+    expect(start.meta).toEqual({
+      tags: ["prod"],
+      environment: "production",
+      release: "v1.2.0",
+      version: "3",
+      session_id: "sess_77",
+    });
+  });
+
+  it("puts source ids on the output event", () => {
+    const result = importTrace(NESTED_FIXTURE, "langfuse");
+    const [out] = only<OutputEvent>(result.events, "output");
+    expect(out.content).toBe("All done.");
+    expect(out.source).toEqual({ trace_id: "tr_n1", observation_id: "ob_root" });
+  });
 });
 
 const LS_ROOT = {
@@ -449,6 +564,28 @@ describe("langsmith import", () => {
     const llms = only<LlmCallEvent>(result.events, "llm_call");
     expect(llms[1].cost_usd).toBe(0.000063);
   });
+
+  it("captures tool run outputs as the call result", () => {
+    const result = importTrace(JSON.stringify([LS_ROOT, LS_TOOL]), "langsmith");
+    const [tool] = only<ToolCallEvent>(result.events, "tool_call");
+    expect(tool.result).toBe("14C, rain");
+  });
+
+  it("reports the resolved format and passes run ids through in source", () => {
+    const result = importTrace(JSON.stringify([LS_ROOT, LS_LLM, LS_TOOL]), "langsmith");
+    expect(result.format).toBe("langsmith");
+    const [tool] = only<ToolCallEvent>(result.events, "tool_call");
+    expect(tool.source).toEqual({
+      trace_id: "a1b2c3d4-0000-0000-0000-000000000000",
+      run_id: "d0d95e21-0000-0000-0000-000000000000",
+      parent_run_id: "a1b2c3d4-0000-0000-0000-000000000000",
+    });
+    const [out] = only<OutputEvent>(result.events, "output");
+    expect(out.source).toEqual({
+      trace_id: "a1b2c3d4-0000-0000-0000-000000000000",
+      run_id: "a1b2c3d4-0000-0000-0000-000000000000",
+    });
+  });
 });
 
 function cli(args: string[]): { code: number; stdout: string; stderr: string } {
@@ -477,10 +614,19 @@ describe("cli import", () => {
     const out = join(dir, "before.jsonl");
     const result = cli(["import", OTEL_BEFORE, "-o", out]);
     expect(result.code).toBe(0);
+    expect(result.stdout).toContain("detected format: otel");
     expect(result.stdout).toContain("imported 1 run, 1 llm call, 1 tool call");
     const lines = readFileSync(out, "utf8").trim().split("\n").map((l) => JSON.parse(l));
     expect(lines[0]).toMatchObject({ type: "run_start", run: "refund-flow" });
     expect(lines.map((l) => l.type)).toEqual(["run_start", "llm_call", "tool_call", "output", "run_end"]);
+  });
+
+  it("prints the langfuse schema in the detected format line", () => {
+    const dir = mkdtempSync(join(tmpdir(), "whatbroke-import-"));
+    const out = join(dir, "nested.jsonl");
+    const result = cli(["import", "test/fixtures/langfuse-nested.json", "-o", out]);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("detected format: langfuse export rows (snake_case)");
   });
 
   it("exits 2 with the supported formats when detection fails", () => {

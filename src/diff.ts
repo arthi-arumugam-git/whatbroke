@@ -211,6 +211,22 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
         },
       });
     }
+    const resultBefore = before.toolCalls[i].result;
+    const resultAfter = after.toolCalls[j].result;
+    if (resultBefore !== undefined && resultAfter !== undefined && resultBefore !== resultAfter) {
+      add({
+        severity: "warning",
+        kind: "tool_result_changed",
+        subject: `tool_result:${before.toolCalls[i].name}`,
+        run: runId,
+        message: `${before.toolCalls[i].name} returned a different result`,
+        detail: {
+          tool: before.toolCalls[i].name,
+          before: truncate(resultBefore),
+          after: truncate(resultAfter),
+        },
+      });
+    }
   }
 
   // outputs

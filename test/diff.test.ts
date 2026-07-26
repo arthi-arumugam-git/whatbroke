@@ -147,6 +147,55 @@ describe("diffTraces", () => {
     expect(result.findings.some((f) => f.kind === "output_changed")).toBe(true);
   });
 
+  it("flags changed tool results as one warning with before/after detail", () => {
+    const withResult = (result: string) => [
+      { type: "run_start", run: "r" },
+      { type: "tool_call", run: "r", name: "get_weather", args: { city: "Paris" }, result },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const diff = diffTraces(
+      parseTrace(trace(withResult("14C, rain"))),
+      parseTrace(trace(withResult("9C, clear"))),
+      { compareOutputs: false },
+    );
+    const findings = diff.findings.filter((f) => f.kind === "tool_result_changed");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe("warning");
+    expect(findings[0].subject).toBe("tool_result:get_weather");
+    expect(findings[0].message).toBe("get_weather returned a different result");
+    expect(findings[0].detail?.before).toBe("14C, rain");
+    expect(findings[0].detail?.after).toBe("9C, clear");
+  });
+
+  it("stays quiet on identical tool results", () => {
+    const events = [
+      { type: "run_start", run: "r" },
+      { type: "tool_call", run: "r", name: "get_weather", args: {}, result: "14C, rain" },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const diff = diffTraces(parseTrace(trace(events)), parseTrace(trace(events)), {
+      compareOutputs: false,
+    });
+    expect(diff.findings.some((f) => f.kind === "tool_result_changed")).toBe(false);
+  });
+
+  it("stays quiet when only one side recorded a tool result", () => {
+    const withResult = [
+      { type: "run_start", run: "r" },
+      { type: "tool_call", run: "r", name: "get_weather", args: {}, result: "14C, rain" },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const withoutResult = [
+      { type: "run_start", run: "r" },
+      { type: "tool_call", run: "r", name: "get_weather", args: {} },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const diff = diffTraces(parseTrace(trace(withResult)), parseTrace(trace(withoutResult)), {
+      compareOutputs: false,
+    });
+    expect(diff.findings.some((f) => f.kind === "tool_result_changed")).toBe(false);
+  });
+
   it("flags new tool errors as breaking", () => {
     const erroring = baseRun("refund", "gpt-4o").map((e: any) =>
       e.type === "tool_call" && e.name === "issue_refund" ? { ...e, error: "422 unprocessable" } : e,

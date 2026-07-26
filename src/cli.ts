@@ -341,6 +341,7 @@ function runImport(argv: string[]): void {
   for (const warning of result.warnings) {
     console.error(pc.yellow(`  note: ${warning}`));
   }
+  console.log(pc.dim(`detected format: ${result.format}${result.schema ? ` ${result.schema}` : ""}`));
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
   console.log(
     `imported ${plural(result.runs, "run")}, ${plural(result.llmCalls, "llm call")}, ${plural(result.toolCalls, "tool call")} -> ${out}`,

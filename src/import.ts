@@ -19,6 +19,9 @@ export interface ImportResult {
   runs: number;
   llmCalls: number;
   toolCalls: number;
+  format: ImportFormat;
+  /** human note on which shape of the format matched, e.g. "export rows (snake_case)" */
+  schema?: string;
   /** optional trace fields the source never provided: "cost", "tool args", ... */
   missing: string[];
   /** notices worth showing the user, printed to stderr by the cli */
@@ -141,6 +144,8 @@ interface ImportedRun {
   derivedName: string;
   calls: ImportedCall[];
   output?: string;
+  outputSource?: Record<string, unknown>;
+  meta?: Record<string, unknown>;
   status: "ok" | "error";
   error?: string;
   startTs?: number;
@@ -158,7 +163,13 @@ function newTally(): Tally {
   return { sawCost: false, sawArgs: false, sawOutput: false, sawTokens: false, warnings: new Set() };
 }
 
-function assemble(importedRuns: ImportedRun[], tally: Tally, options: ImportOptions): ImportResult {
+function assemble(
+  importedRuns: ImportedRun[],
+  tally: Tally,
+  options: ImportOptions,
+  format: ImportFormat,
+  schema?: string,
+): ImportResult {
   const names = nameRuns(
     importedRuns.map((r) => r.derivedName),
     options.run,
@@ -172,6 +183,7 @@ function assemble(importedRuns: ImportedRun[], tally: Tally, options: ImportOpti
     const name = names[i];
     const start: RunStartEvent = { type: "run_start", run: name };
     if (run.startTs !== undefined) start.ts = run.startTs;
+    if (run.meta && Object.keys(run.meta).length) start.meta = run.meta;
     events.push(start);
     run.calls.sort((a, b) => (a.startKey < b.startKey ? -1 : a.startKey > b.startKey ? 1 : 0));
     for (const call of run.calls) {
@@ -181,6 +193,7 @@ function assemble(importedRuns: ImportedRun[], tally: Tally, options: ImportOpti
     }
     if (run.output !== undefined) {
       const out: OutputEvent = { type: "output", run: name, content: run.output };
+      if (run.outputSource) out.source = run.outputSource;
       events.push(out);
     }
     const end: RunEndEvent = { type: "run_end", run: name, status: run.status };
@@ -193,14 +206,17 @@ function assemble(importedRuns: ImportedRun[], tally: Tally, options: ImportOpti
   if (llmCalls && !tally.sawCost) missing.push("cost");
   if (toolCalls && !tally.sawArgs) missing.push("tool args");
   if (!tally.sawOutput) missing.push("output");
-  return {
+  const result: ImportResult = {
     events,
     runs: importedRuns.length,
     llmCalls,
     toolCalls,
+    format,
     missing,
     warnings: [...tally.warnings],
   };
+  if (schema) result.schema = schema;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +308,14 @@ function importOtel(values: unknown[], options: ImportOptions): ImportResult {
 
     const run: ImportedRun = { derivedName, calls: [], status: "ok" };
     let lastOutput: string | undefined;
+    let lastOutputSource: Record<string, unknown> | undefined;
+    const sourceOf = (span: OtlpSpan): Record<string, unknown> => {
+      const source: Record<string, unknown> = {};
+      if (span.traceId !== undefined) source.trace_id = span.traceId;
+      if (span.spanId !== undefined) source.span_id = span.spanId;
+      if (span.parentSpanId !== undefined) source.parent_span_id = span.parentSpanId;
+      return source;
+    };
     for (const span of traceSpans) {
       const attrs = spanAttrs(span);
       const op = attrs.get("gen_ai.operation.name");
@@ -330,6 +354,7 @@ function importOtel(values: unknown[], options: ImportOptions): ImportResult {
         }
         if (latency !== undefined) event.latency_ms = latency;
         if (errorText) event.error = errorText;
+        event.source = sourceOf(span);
         run.calls.push({ startKey: start, event });
       } else if (isLlm) {
         const model = String(
@@ -351,15 +376,20 @@ function importOtel(values: unknown[], options: ImportOptions): ImportResult {
         if (Array.isArray(finish) && finish.length) event.stop_reason = String(finish[0]);
         if (latency !== undefined) event.latency_ms = latency;
         if (errorText) event.error = errorText;
+        event.source = sourceOf(span);
         run.calls.push({ startKey: start, event });
 
         const messages = attrs.get("gen_ai.output.messages");
         const text = outputMessagesText(messages);
-        if (text !== undefined) lastOutput = text;
+        if (text !== undefined) {
+          lastOutput = text;
+          lastOutputSource = sourceOf(span);
+        }
       }
     }
     if (lastOutput !== undefined) {
       run.output = lastOutput;
+      run.outputSource = lastOutputSource;
       tally.sawOutput = true;
     }
     importedRuns.push(run);
@@ -370,7 +400,7 @@ function importOtel(values: unknown[], options: ImportOptions): ImportResult {
       "no model output captured in the source spans (gen_ai.output.messages is opt-in); output comparison unavailable",
     );
   }
-  return assemble(importedRuns, tally, options);
+  return assemble(importedRuns, tally, options, "otel");
 }
 
 /** gen_ai.output.messages: [{role, parts:[{type:"text", content}], finish_reason}] */
@@ -421,8 +451,31 @@ function contentOf(output: unknown): string {
 }
 
 function importLangfuse(values: unknown[], options: ImportOptions): ImportResult {
-  const rows = values.flatMap((v) => (Array.isArray(v) ? v : [v])).filter(isRecord);
-  if (!rows.length) throw new Error("no observation rows found in the langfuse input");
+  const allRows = values.flatMap((v) => (Array.isArray(v) ? v : [v])).filter(isRecord);
+  if (!allRows.length) throw new Error("no observation rows found in the langfuse input");
+
+  const tally = newTally();
+  const seenIds = new Set<unknown>();
+  let duplicates = 0;
+  const rows: Record<string, unknown>[] = [];
+  for (const row of allRows) {
+    const id = field(row, "id");
+    if (id !== undefined) {
+      if (seenIds.has(id)) {
+        duplicates++;
+        continue;
+      }
+      seenIds.add(id);
+    }
+    rows.push(row);
+  }
+  if (duplicates) {
+    tally.warnings.add(`${duplicates} duplicate row${duplicates === 1 ? "" : "s"} skipped`);
+  }
+
+  const schema = rows.some((r) => "trace_id" in r || "start_time" in r)
+    ? "export rows (snake_case)"
+    : "API objects (camelCase)";
 
   const traces = new Map<string, Record<string, unknown>[]>();
   for (const row of rows) {
@@ -432,7 +485,6 @@ function importLangfuse(values: unknown[], options: ImportOptions): ImportResult
     traces.set(id, list);
   }
 
-  const tally = newTally();
   const importedRuns: ImportedRun[] = [];
   for (const [traceId, traceRows] of traces) {
     traceRows.sort((a, b) => {
@@ -448,9 +500,38 @@ function importLangfuse(values: unknown[], options: ImportOptions): ImportResult
     };
     const derivedName = String(field(traceRows[0], "trace_name", "traceName") ?? traceId);
 
+    const sourceOf = (row: Record<string, unknown>): Record<string, unknown> => {
+      const source: Record<string, unknown> = { trace_id: traceId };
+      const id = field(row, "id");
+      if (id !== undefined) source.observation_id = id;
+      const parent = field(row, "parent_observation_id", "parentObservationId");
+      if (parent !== undefined) source.parent_observation_id = parent;
+      return source;
+    };
+
+    const meta: Record<string, unknown> = {};
+    const metaKeys: Array<[string, string[]]> = [
+      ["tags", ["tags"]],
+      ["environment", ["environment"]],
+      ["release", ["release"]],
+      ["version", ["version"]],
+      ["session_id", ["session_id", "sessionId"]],
+    ];
+    for (const row of traceRows) {
+      for (const [key, aliases] of metaKeys) {
+        if (meta[key] === undefined) {
+          const value = field(row, ...aliases);
+          if (value !== undefined) meta[key] = value;
+        }
+      }
+    }
+
     const run: ImportedRun = { derivedName, calls: [], status: "ok" };
+    if (Object.keys(meta).length) run.meta = meta;
     let rootOutput: string | undefined;
+    let rootOutputSource: Record<string, unknown> | undefined;
     let lastOutput: string | undefined;
+    let lastOutputSource: Record<string, unknown> | undefined;
     for (const row of traceRows) {
       const type = String(field(row, "type") ?? "").toUpperCase();
       const start = isoMs(field(row, "start_time", "startTime"));
@@ -496,6 +577,7 @@ function importLangfuse(values: unknown[], options: ImportOptions): ImportResult
         }
         if (latency !== undefined) event.latency_ms = latency;
         if (errorText) event.error = errorText;
+        event.source = sourceOf(row);
         run.calls.push({ startKey: start ?? 0, event });
       } else if (type === "TOOL" || (type === "SPAN" && !isRoot(row))) {
         // older SDKs logged tool use as plain nested SPANs
@@ -505,27 +587,35 @@ function importLangfuse(values: unknown[], options: ImportOptions): ImportResult
           event.args = args;
           tally.sawArgs = true;
         }
+        const toolOutput = field(row, "output");
+        if (toolOutput !== undefined) event.result = contentOf(toolOutput);
         if (latency !== undefined) event.latency_ms = latency;
         if (errorText) event.error = errorText;
+        event.source = sourceOf(row);
         run.calls.push({ startKey: start ?? 0, event });
       }
 
       const output = field(row, "output");
       if (output !== undefined && type !== "TOOL" && !(type === "SPAN" && !isRoot(row))) {
         const content = contentOf(output);
-        if (isRoot(row)) rootOutput = content;
+        if (isRoot(row)) {
+          rootOutput = content;
+          rootOutputSource = sourceOf(row);
+        }
         lastOutput = content;
+        lastOutputSource = sourceOf(row);
       }
     }
     const output = rootOutput ?? lastOutput;
     if (output !== undefined) {
       run.output = output;
+      run.outputSource = rootOutput !== undefined ? rootOutputSource : lastOutputSource;
       tally.sawOutput = true;
     }
     importedRuns.push(run);
   }
 
-  return assemble(importedRuns, tally, options);
+  return assemble(importedRuns, tally, options, "langfuse", schema);
 }
 
 // ---------------------------------------------------------------------------
@@ -559,6 +649,14 @@ function importLangsmith(values: unknown[], options: ImportOptions): ImportResul
       imported.status = "error";
       imported.error = root.error;
     }
+    const sourceOf = (run: Record<string, unknown>): Record<string, unknown> => {
+      const source: Record<string, unknown> = { trace_id: traceId };
+      if (run.id !== undefined) source.run_id = run.id;
+      if (run.parent_run_id !== undefined && run.parent_run_id !== null) {
+        source.parent_run_id = run.parent_run_id;
+      }
+      return source;
+    };
     for (const run of traceRuns) {
       const start = isoMs(run.start_time);
       const end = isoMs(run.end_time);
@@ -598,6 +696,7 @@ function importLangsmith(values: unknown[], options: ImportOptions): ImportResul
         if (stop) event.stop_reason = stop;
         if (latency !== undefined) event.latency_ms = latency;
         if (errorText) event.error = errorText;
+        event.source = sourceOf(run);
         imported.calls.push({ startKey: orderKey, event });
       } else if (run.run_type === "tool") {
         const event: ToolCallEvent = { type: "tool_call", run: "", name: String(run.name ?? "tool") };
@@ -606,8 +705,13 @@ function importLangsmith(values: unknown[], options: ImportOptions): ImportResul
           event.args = args;
           tally.sawArgs = true;
         }
+        if (isRecord(run.outputs)) {
+          const toolOutput = run.outputs.output !== undefined ? run.outputs.output : run.outputs;
+          event.result = contentOf(toolOutput);
+        }
         if (latency !== undefined) event.latency_ms = latency;
         if (errorText) event.error = errorText;
+        event.source = sourceOf(run);
         imported.calls.push({ startKey: orderKey, event });
       }
     }
@@ -616,12 +720,13 @@ function importLangsmith(values: unknown[], options: ImportOptions): ImportResul
       const outputs = root.outputs;
       const content = outputs.output ?? outputs.answer ?? outputs;
       imported.output = contentOf(content);
+      imported.outputSource = sourceOf(root);
       tally.sawOutput = true;
     }
     importedRuns.push(imported);
   }
 
-  return assemble(importedRuns, tally, options);
+  return assemble(importedRuns, tally, options, "langsmith");
 }
 
 /** outputs.generations[0][0].generation_info.finish_reason, best-effort */
