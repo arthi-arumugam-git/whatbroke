@@ -318,6 +318,13 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     const notes: string[] = [];
     const shape = differenceShape(promptBefore, promptAfter);
     if (shape) notes.push(shape);
+    // prompts are paired by position, so a run that gained or lost a call may have shifted
+    // every pair after it. Say so rather than let the reader trust the pairing
+    if (before.llmCalls.length !== after.llmCalls.length) {
+      notes.push(
+        `${before.llmCalls.length} -> ${after.llmCalls.length} llm calls, matched by position`,
+      );
+    }
     if (explains.length) notes.push(`plausibly explains: ${explains.join(", ")}`);
     promptFindings.push({
       severity: "warning",

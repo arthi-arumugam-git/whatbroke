@@ -351,6 +351,31 @@ describe("prompt diffs a reader can act on", () => {
     expect(String(f.detail?.after)).toContain("Answer in French.");
   });
 
+  // Prompts are paired by position. A run that gained a call may have shifted every pair
+  // after it, so the finding has to say the pairing is positional rather than let it read as
+  // "the prompt at this step was edited".
+  it("says so when the two runs did not make the same number of llm calls", () => {
+    const one = [
+      { type: "run_start", run: "r" },
+      { type: "llm_call", run: "r", model: "gpt-4o", prompt: "plan the refund" },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const two = [
+      { type: "run_start", run: "r" },
+      { type: "llm_call", run: "r", model: "gpt-4o", prompt: "check the policy first" },
+      { type: "llm_call", run: "r", model: "gpt-4o", prompt: "plan the refund" },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const diff = diffTraces(parseTrace(trace(one)), parseTrace(trace(two)));
+    const f = diff.findings.find((x) => x.kind === "prompt_changed")!;
+    expect(f.message).toContain("1 -> 2 llm calls, matched by position");
+  });
+
+  it("stays quiet about the count when both runs made the same number of calls", () => {
+    const f = promptFinding("Be terse.", "Be verbose.")!;
+    expect(f.message).toBe("prompt changed");
+  });
+
   it("names a unicode normalisation difference", () => {
     // the same word in NFC and NFD: identical on screen, different bytes
     const f = promptFinding("Répondez en café.".normalize("NFC"), "Répondez en café.".normalize("NFD"))!;
