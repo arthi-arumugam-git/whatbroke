@@ -8,9 +8,9 @@ That turns out to be the more uncomfortable experiment. A model swap is a decisi
 
 Same machine, same model file, same prompts, same tool schemas, temperature 0, seed 42, 3 samples per side. With 3 samples on each side whatbroke compares every baseline run against every after run, so each finding carries a rate out of 9 pairs.
 
-- **A** — agent talks to ollama directly, `http://localhost:11434/v1`
-- **B** — agent talks to LiteLLM `ollama_chat/qwen2.5:3b`, which forwards to that same ollama
-- **C** — agent talks to LiteLLM `ollama/qwen2.5:3b`, which forwards to that same ollama
+- **A**: agent talks to ollama directly, `http://localhost:11434/v1`
+- **B**: agent talks to LiteLLM `ollama_chat/qwen2.5:3b`, which forwards to that same ollama
+- **C**: agent talks to LiteLLM `ollama/qwen2.5:3b`, which forwards to that same ollama
 
 Every arm was recorded twice, once non-streaming and once with `--stream`. Versions: litellm 1.93.0, qwen2.5:3b at Q4_K_M.
 
