@@ -206,6 +206,53 @@ describe("startProxy", () => {
     });
   });
 
+  // The proxy sees the request the agent actually sent, so it is the one capture path that
+  // never has to guess what the prompt was.
+  it("records the prompt from the request body", async () => {
+    await withProxy(async (proxy, file) => {
+      await fetch(`${proxy.url}/v1/chat/completions?text`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: "Be terse." },
+            { role: "user", content: "Where is order A-1042?" },
+          ],
+        }),
+      });
+      await proxy.close();
+      const run = parseTrace(readFileSync(file, "utf8")).get("default")!;
+      expect(run.llmCalls[0].prompt).toBe("system: Be terse.\nuser: Where is order A-1042?");
+    });
+  });
+
+  it("records the anthropic system prompt, which sits outside messages", async () => {
+    await withProxy(async (proxy, file) => {
+      await fetch(`${proxy.url}/v1/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          system: "Be terse.",
+          messages: [{ role: "user", content: "Where is order A-1042?" }],
+        }),
+      });
+      await proxy.close();
+      const run = parseTrace(readFileSync(file, "utf8")).get("default")!;
+      expect(run.llmCalls[0].prompt).toBe("system: Be terse.\nuser: Where is order A-1042?");
+    });
+  });
+
+  it("leaves the prompt off when the request body carried none", async () => {
+    await withProxy(async (proxy, file) => {
+      await fetch(`${proxy.url}/v1/chat/completions?text`, { method: "POST", body: "{}" });
+      await proxy.close();
+      const run = parseTrace(readFileSync(file, "utf8")).get("default")!;
+      expect(run.llmCalls[0].prompt).toBeUndefined();
+    });
+  });
+
   it("records upstream errors and passes the status through", async () => {
     await withProxy(async (proxy, file) => {
       const res = await fetch(`${proxy.url}/v1/broken`, { method: "POST", body: "{}" });

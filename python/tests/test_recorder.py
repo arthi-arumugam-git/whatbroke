@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -194,3 +195,84 @@ def test_malformed_tool_arguments_recorded_without_args(tmp_path):
     tools = [e for e in read_events(trace) if e["type"] == "tool_call"]
     assert tools[0]["name"] == "lookup_order"
     assert "args" not in tools[0]
+
+
+# The prompt has to reach the trace in exactly the shape the Node recorder writes, or a
+# baseline recorded in one language and a rerun recorded in the other would report a prompt
+# change that never happened. These strings are asserted verbatim in test/record.test.ts.
+def test_records_the_prompt_from_openai_messages(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    rec = Recorder(str(trace), run="flow")
+
+    client = fake_openai_client(lambda **kwargs: fake_openai_response())
+    rec.wrap_openai(client)
+    client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": "Be terse."},
+            {"role": "user", "content": "Where is order A-1?"},
+        ],
+    )
+
+    llm = [e for e in read_events(trace) if e["type"] == "llm_call"]
+    assert llm[0]["prompt"] == "system: Be terse.\nuser: Where is order A-1?"
+
+
+def test_records_the_anthropic_system_prompt(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    rec = Recorder(str(trace), run="flow")
+
+    client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kwargs: fake_anthropic_response()))
+    rec.wrap_anthropic(client)
+    client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        system="Be terse.",
+        messages=[{"role": "user", "content": "Where is order A-1?"}],
+    )
+
+    llm = [e for e in read_events(trace) if e["type"] == "llm_call"]
+    assert llm[0]["prompt"] == "system: Be terse.\nuser: Where is order A-1?"
+
+
+def test_flattens_content_blocks(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    rec = Recorder(str(trace), run="flow")
+    rec.llm_call(
+        model="claude-sonnet-4-6",
+        prompt=[{"role": "user", "content": [{"type": "text", "text": "Where is order A-1?"}]}],
+    )
+
+    llm = [e for e in read_events(trace) if e["type"] == "llm_call"]
+    assert llm[0]["prompt"] == "user: Where is order A-1?"
+
+
+def test_blank_prompt_is_recorded_as_no_prompt(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    rec = Recorder(str(trace), run="flow")
+    for blank in ["", "   ", [], {}, None]:
+        rec.llm_call(model="gpt-4o", prompt=blank)
+
+    llm = [e for e in read_events(trace) if e["type"] == "llm_call"]
+    assert all("prompt" not in e for e in llm)
+
+
+def test_prompt_keeps_unicode(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    rec = Recorder(str(trace), run="flow")
+    rec.llm_call(model="gpt-4o", prompt=[{"role": "user", "content": "Répondez en français. 🙂"}])
+
+    llm = [e for e in read_events(trace) if e["type"] == "llm_call"]
+    assert llm[0]["prompt"] == "user: Répondez en français. 🙂"
+
+
+def test_matches_the_node_normalisation_fixture():
+    """The Node recorder runs this same fixture in test/import.test.ts."""
+    from whatbroke import _prompt_text
+
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "test", "fixtures", "prompt-normalisation.json")
+    with open(path, encoding="utf-8") as f:
+        fixture = json.load(f)
+    assert fixture["cases"], "fixture is empty, which would make this test pass for nothing"
+    for case in fixture["cases"]:
+        assert _prompt_text(case["input"]) == case["expected"], case["name"]

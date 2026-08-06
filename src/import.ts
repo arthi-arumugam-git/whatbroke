@@ -156,11 +156,19 @@ interface Tally {
   sawArgs: boolean;
   sawOutput: boolean;
   sawTokens: boolean;
+  sawPrompt: boolean;
   warnings: Set<string>;
 }
 
 function newTally(): Tally {
-  return { sawCost: false, sawArgs: false, sawOutput: false, sawTokens: false, warnings: new Set() };
+  return {
+    sawCost: false,
+    sawArgs: false,
+    sawOutput: false,
+    sawTokens: false,
+    sawPrompt: false,
+    warnings: new Set(),
+  };
 }
 
 function assemble(
@@ -205,6 +213,9 @@ function assemble(
   if (llmCalls && !tally.sawTokens) missing.push("tokens");
   if (llmCalls && !tally.sawCost) missing.push("cost");
   if (toolCalls && !tally.sawArgs) missing.push("tool args");
+  // silence about the prompt otherwise reads as "the prompt did not change", which is the
+  // one conclusion a trace without prompts cannot support
+  if (llmCalls && !tally.sawPrompt) missing.push("prompts");
   if (!tally.sawOutput) missing.push("output");
   const result: ImportResult = {
     events,
@@ -361,6 +372,15 @@ function importOtel(values: unknown[], options: ImportOptions): ImportResult {
           attrs.get("gen_ai.response.model") ?? attrs.get("gen_ai.request.model") ?? "unknown",
         );
         const event: LlmCallEvent = { type: "llm_call", run: "", model };
+        // gen_ai.input.messages is the current convention; gen_ai.prompt is what older
+        // instrumentations emitted. Both are opt-in, same as the output side.
+        const prompt = promptText(
+          attrs.get("gen_ai.input.messages") ?? attrs.get("gen_ai.prompt"),
+        );
+        if (prompt !== undefined) {
+          event.prompt = prompt;
+          tally.sawPrompt = true;
+        }
         const input =
           toNum(attrs.get("gen_ai.usage.input_tokens")) ?? toNum(attrs.get("gen_ai.usage.prompt_tokens"));
         const output =
@@ -448,6 +468,95 @@ function contentOf(output: unknown): string {
   if (typeof output === "string") return output;
   if (isRecord(output) && typeof output.content === "string") return output.content;
   return stableStringify(output);
+}
+
+/**
+ * Normalise whatever a source calls the prompt into comparable text.
+ *
+ * Every provider ships a different shape for the same thing: a bare string, a chat array, or
+ * an envelope with the array under `messages`. They all have to reduce to one string or the
+ * diff reports formatting churn as a prompt change. Anything unrecognised falls through to
+ * stableStringify, which is key-order independent, so an SDK reordering its JSON does not
+ * read as an edit.
+ */
+export function promptText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (typeof parsed === "string") return parsed.trim() || undefined;
+      const nested = promptText(parsed);
+      if (nested !== undefined) return nested;
+    } catch {
+      // not JSON, so the string is already the prompt
+    }
+    return trimmed;
+  }
+  if (Array.isArray(value)) {
+    const parts = value.map(messageText).filter((s): s is string => s !== undefined);
+    return parts.length ? parts.join("\n") : undefined;
+  }
+  if (isRecord(value)) {
+    for (const key of ["messages", "prompt", "input"]) {
+      if (value[key] !== undefined) {
+        const nested = promptText(value[key]);
+        if (nested !== undefined) return nested;
+      }
+    }
+    const single = messageText(value);
+    if (single !== undefined) return single;
+    const dumped = stableStringify(value);
+    return dumped === "{}" ? undefined : dumped;
+  }
+  return undefined;
+}
+
+/** One chat message to text. Role is kept: moving an instruction from system to user is a real change. */
+function messageText(message: unknown): string | undefined {
+  if (typeof message === "string") return message.trim() || undefined;
+  // LangChain's tuple form, ["user", "text"], which is what LangSmith stores for chat models
+  if (
+    Array.isArray(message) &&
+    message.length === 2 &&
+    typeof message[0] === "string" &&
+    typeof message[1] === "string"
+  ) {
+    return `${message[0]}: ${message[1]}`;
+  }
+  if (!isRecord(message)) return undefined;
+  // LangChain's serialised form nests the real message under kwargs
+  if (isRecord(message.kwargs)) {
+    const inner = messageText(message.kwargs);
+    if (inner !== undefined) return inner;
+  }
+  const role = typeof message.role === "string" ? message.role : undefined;
+  let body: string | undefined;
+  if (typeof message.content === "string") {
+    body = message.content;
+  } else {
+    // content blocks (Anthropic, OpenAI vision) and OTLP's parts[] carry the text one level down
+    const blocks = Array.isArray(message.content)
+      ? message.content
+      : Array.isArray(message.parts)
+        ? message.parts
+        : undefined;
+    if (blocks) {
+      const texts = blocks
+        .map((p) =>
+          isRecord(p) && typeof p.text === "string"
+            ? p.text
+            : isRecord(p) && typeof p.content === "string"
+              ? p.content
+              : undefined,
+        )
+        .filter((s): s is string => s !== undefined);
+      body = texts.length ? texts.join("\n") : undefined;
+    }
+  }
+  if (body === undefined) return undefined;
+  return role ? `${role}: ${body}` : body;
 }
 
 function importLangfuse(values: unknown[], options: ImportOptions): ImportResult {
@@ -551,6 +660,13 @@ function importLangfuse(values: unknown[], options: ImportOptions): ImportResult
       if (type === "GENERATION" || type === "EMBEDDING") {
         const model = String(field(row, "provided_model_name", "providedModelName", "model") ?? "unknown");
         const event: LlmCallEvent = { type: "llm_call", run: "", model };
+        // the observation's `input` is the prompt. It was previously read only for its token
+        // count, so the text sat in every export and never reached the diff.
+        const prompt = promptText(field(row, "input"));
+        if (prompt !== undefined) {
+          event.prompt = prompt;
+          tally.sawPrompt = true;
+        }
         const usage = field(row, "usage_details", "usageDetails", "usage");
         if (isRecord(usage)) {
           const input = toNum(usage.input) ?? toNum(usage.promptTokens);
@@ -678,6 +794,14 @@ function importLangsmith(values: unknown[], options: ImportOptions): ImportResul
           params.model ?? params.model_name ?? params.model_id ?? llmOutput.model_name ?? "unknown",
         );
         const event: LlmCallEvent = { type: "llm_call", run: "", model };
+        // LangSmith puts the rendered prompt on the llm run's own inputs, usually as
+        // {messages:[[{...}]]} for chat models and {prompts:[...]} for completion models
+        const inputs = isRecord(run.inputs) ? run.inputs : undefined;
+        const prompt = promptText(inputs?.prompts ?? inputs);
+        if (prompt !== undefined) {
+          event.prompt = prompt;
+          tally.sawPrompt = true;
+        }
         const usage = isRecord(llmOutput.token_usage) ? llmOutput.token_usage : {};
         const input = toNum(run.prompt_tokens) ?? toNum(usage.prompt_tokens);
         const output = toNum(run.completion_tokens) ?? toNum(usage.completion_tokens);

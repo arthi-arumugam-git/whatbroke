@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { Recorder } from "./record.js";
+import { anthropicPrompt, Recorder } from "./record.js";
 
 export interface ProxyOptions {
   /** trace file path, e.g. traces/current.jsonl */
@@ -151,6 +151,9 @@ export function startProxy(options: ProxyOptions): Promise<ProxyHandle> {
     const rec = recorderFor(run);
     rec.llmCall({
       model: summary.model,
+      // the request the agent actually sent, so this is the one capture path that never has
+      // to reconstruct the prompt from an export
+      prompt: requestPrompt(body, anthropic),
       latencyMs: Date.now() - started,
       inputTokens: summary.inputTokens,
       outputTokens: summary.outputTokens,
@@ -196,6 +199,17 @@ function parseSse(text: string): any[] {
     }
   }
   return events;
+}
+
+/** the prompt out of the forwarded request body, or nothing if it was not a chat request */
+function requestPrompt(body: Buffer, anthropic: boolean): unknown {
+  if (!body.length) return undefined;
+  try {
+    const parsed = JSON.parse(body.toString("utf8"));
+    return anthropic ? anthropicPrompt(parsed) : parsed?.messages;
+  } catch {
+    return undefined;
+  }
 }
 
 function summarizeOpenAI(body: any): Summary | null {

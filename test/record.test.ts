@@ -115,4 +115,51 @@ describe("Recorder", () => {
     expect(() => rec.wrapOpenAI({} as any)).toThrow("chat.completions.create");
     expect(() => rec.wrapAnthropic({} as any)).toThrow("messages.create");
   });
+
+  // Recorded traces have to carry the prompt too. A tool that records the run it just made
+  // and still cannot tell you the prompt moved is the gap this closes everywhere else.
+  it("wrapOpenAI records the prompt it was called with", async () => {
+    const rec = new Recorder({ file, run: "r1" });
+    const fake = {
+      chat: { completions: { create: async () => ({ model: "gpt-4o", choices: [] }) } },
+    };
+    const client = rec.wrapOpenAI(fake);
+    await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "Be terse." },
+        { role: "user", content: "Where is order A-1?" },
+      ],
+    });
+
+    const run = parseTrace(readFileSync(file, "utf8")).get("r1")!;
+    expect(run.llmCalls[0].prompt).toBe("system: Be terse.\nuser: Where is order A-1?");
+  });
+
+  it("wrapAnthropic records the system prompt, which lives outside messages", async () => {
+    const rec = new Recorder({ file, run: "r1" });
+    const fake = {
+      messages: { create: async () => ({ model: "claude-sonnet-4-6", content: [] }) },
+    };
+    const client = rec.wrapAnthropic(fake);
+    await client.messages.create({
+      model: "claude-sonnet-4-6",
+      system: "Be terse.",
+      messages: [{ role: "user", content: "Where is order A-1?" }],
+    });
+
+    const run = parseTrace(readFileSync(file, "utf8")).get("r1")!;
+    expect(run.llmCalls[0].prompt).toBe("system: Be terse.\nuser: Where is order A-1?");
+  });
+
+  it("leaves the prompt off when the call had no messages", async () => {
+    const rec = new Recorder({ file, run: "r1" });
+    const fake = {
+      chat: { completions: { create: async () => ({ model: "gpt-4o", choices: [] }) } },
+    };
+    await rec.wrapOpenAI(fake).chat.completions.create({ model: "gpt-4o" });
+
+    const run = parseTrace(readFileSync(file, "utf8")).get("r1")!;
+    expect(run.llmCalls[0].prompt).toBeUndefined();
+  });
 });

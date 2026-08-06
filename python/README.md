@@ -31,11 +31,23 @@ For everything else, write events directly:
 
 ```python
 rec = Recorder("traces/current.jsonl", run="refund-flow")
-rec.llm_call(model="gpt-4o", latency_ms=900, input_tokens=512, output_tokens=128, cost_usd=0.004)
+rec.llm_call(
+    model="gpt-4o",
+    prompt=[{"role": "system", "content": "You are a refund agent."}],
+    latency_ms=900,
+    input_tokens=512,
+    output_tokens=128,
+    cost_usd=0.004,
+)
 rec.tool_call("lookup_order", {"order_id": "A-1042"})
 rec.output("Refund issued.")
 rec.end("ok")
 ```
+
+`prompt` takes whatever your SDK takes: a string, a message list, or content blocks. It is
+normalised to `role: text` lines, exactly as the Node recorder normalises it, so a baseline
+recorded from Python diffs cleanly against a rerun recorded from Node. The wrappers fill it in
+for you, including Anthropic's `system`, which lives outside `messages`.
 
 ## Diffing
 

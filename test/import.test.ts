@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { detectFormat, importTrace } from "../src/import.js";
+import { detectFormat, importTrace, promptText } from "../src/import.js";
 import type { LlmCallEvent, OutputEvent, RunEndEvent, ToolCallEvent, TraceEvent } from "../src/types.js";
 
 function attr(key: string, value: Record<string, unknown>) {
@@ -652,5 +652,136 @@ describe("cli import", () => {
     const result = cli(["diff", before, after]);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("lookup_order called with different args (order_id)");
+  });
+});
+
+// The prompt is present in all three export formats and was being read only for its token
+// count. These pin the capture, since a prompt that never reaches the trace can never be diffed.
+describe("prompt capture", () => {
+  it("captures the prompt from a langfuse GENERATION input", () => {
+    const [llm] = only<LlmCallEvent>(
+      importTrace(JSON.stringify([LANGFUSE_GENERATION]), "langfuse").events,
+      "llm_call",
+    );
+    expect(llm.prompt).toBe("user: Weather in Paris?");
+  });
+
+  it("keeps the role, so moving an instruction between roles reads as a change", () => {
+    const asSystem = { ...LANGFUSE_GENERATION, input: [{ role: "system", content: "Weather in Paris?" }] };
+    const [llm] = only<LlmCallEvent>(
+      importTrace(JSON.stringify([asSystem]), "langfuse").events,
+      "llm_call",
+    );
+    expect(llm.prompt).toBe("system: Weather in Paris?");
+  });
+
+  it("joins a multi-message langfuse prompt in order", () => {
+    const row = {
+      ...LANGFUSE_GENERATION,
+      input: [
+        { role: "system", content: "Be terse." },
+        { role: "user", content: "Weather in Paris?" },
+      ],
+    };
+    const [llm] = only<LlmCallEvent>(importTrace(JSON.stringify([row]), "langfuse").events, "llm_call");
+    expect(llm.prompt).toBe("system: Be terse.\nuser: Weather in Paris?");
+  });
+
+  it("unwraps langfuse input given as a JSON string", () => {
+    const row = { ...LANGFUSE_GENERATION, input: JSON.stringify([{ role: "user", content: "Hi" }]) };
+    const [llm] = only<LlmCallEvent>(importTrace(JSON.stringify([row]), "langfuse").events, "llm_call");
+    expect(llm.prompt).toBe("user: Hi");
+  });
+
+  it("flattens Anthropic-style content blocks", () => {
+    const row = {
+      ...LANGFUSE_GENERATION,
+      input: [{ role: "user", content: [{ type: "text", text: "Weather in Paris?" }] }],
+    };
+    const [llm] = only<LlmCallEvent>(importTrace(JSON.stringify([row]), "langfuse").events, "llm_call");
+    expect(llm.prompt).toBe("user: Weather in Paris?");
+  });
+
+  it("captures the prompt from a langsmith llm run's message tuples", () => {
+    const [llm] = only<LlmCallEvent>(
+      importTrace(JSON.stringify([LS_ROOT, LS_LLM]), "langsmith").events,
+      "llm_call",
+    );
+    expect(llm.prompt).toBe("user: Weather in Paris?");
+  });
+
+  it("captures the prompt from OTLP gen_ai.input.messages", () => {
+    const span = {
+      ...CHAT_SPAN,
+      attributes: [
+        ...CHAT_SPAN.attributes,
+        attr("gen_ai.input.messages", {
+          stringValue: JSON.stringify([
+            { role: "user", parts: [{ type: "text", content: "Weather in Paris?" }] },
+          ]),
+        }),
+      ],
+    };
+    const [llm] = only<LlmCallEvent>(eventsOf(otlp([span])), "llm_call");
+    expect(llm.prompt).toBe("user: Weather in Paris?");
+  });
+
+  it("leaves prompt undefined when the source never captured one", () => {
+    const [llm] = only<LlmCallEvent>(eventsOf(otlp([CHAT_SPAN])), "llm_call");
+    expect(llm.prompt).toBeUndefined();
+  });
+
+  // Without this the report reads as "the prompt did not change" when it was simply never
+  // recorded. The CLI prints this list as "not in the source: ...".
+  it("reports prompts as missing when no llm call captured one", () => {
+    const result = importTrace(otlp([CHAT_SPAN]), "otel");
+    expect(result.missing).toContain("prompts");
+  });
+
+  it("does not report prompts as missing once one is captured", () => {
+    const result = importTrace(JSON.stringify([LANGFUSE_GENERATION]), "langfuse");
+    expect(result.missing).not.toContain("prompts");
+  });
+
+  // A blank input is a source that did not record the prompt, not a run whose prompt was
+  // empty. Storing "" would make the next diff report a prompt change against every real run.
+  it("treats a blank input as no prompt at all", () => {
+    for (const input of ["", "   ", [], {}, null]) {
+      const row = { ...LANGFUSE_GENERATION, input };
+      const [llm] = only<LlmCallEvent>(importTrace(JSON.stringify([row]), "langfuse").events, "llm_call");
+      expect(llm.prompt, `input ${JSON.stringify(input)}`).toBeUndefined();
+    }
+  });
+
+  it("reports prompts as missing when every input was blank", () => {
+    const row = { ...LANGFUSE_GENERATION, input: [] };
+    expect(importTrace(JSON.stringify([row]), "langfuse").missing).toContain("prompts");
+  });
+
+  // The Python recorder normalises prompts too, from its own copy of this logic. Both sides
+  // run the same fixture: a baseline recorded in one language and a rerun recorded in the
+  // other must not diff as a prompt change that never happened.
+  describe("shared normalisation fixture", () => {
+    const fixture = JSON.parse(
+      readFileSync(join(import.meta.dirname, "fixtures", "prompt-normalisation.json"), "utf8"),
+    ) as { cases: Array<{ name: string; input: unknown; expected: string | null }> };
+
+    it("has cases to run", () => {
+      // a fixture that failed to load would otherwise make this whole block pass for nothing
+      expect(fixture.cases.length).toBeGreaterThan(0);
+    });
+
+    for (const testCase of fixture.cases) {
+      it(testCase.name, () => {
+        expect(promptText(testCase.input) ?? null).toBe(testCase.expected);
+      });
+    }
+  });
+
+  it("keeps unicode in the prompt byte for byte", () => {
+    const text = "Répondez en français. 🙂";
+    const row = { ...LANGFUSE_GENERATION, input: [{ role: "user", content: text }] };
+    const [llm] = only<LlmCallEvent>(importTrace(JSON.stringify([row]), "langfuse").events, "llm_call");
+    expect(llm.prompt).toBe(`user: ${text}`);
   });
 });

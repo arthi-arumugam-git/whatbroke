@@ -207,3 +207,183 @@ describe("diffTraces", () => {
     expect(result.findings.some((f) => f.kind === "tool_error" && f.severity === "breaking")).toBe(true);
   });
 });
+
+// The prompt is the first thing anyone checks when an agent's behavior moves, so a diff that
+// stays silent about it makes the user go and find it by hand. These cover the capture, the
+// attribution, and the cases where claiming a cause would be a guess.
+describe("prompt diffing", () => {
+  const withPrompt = (run: string, prompt: string, output: string) => [
+    { type: "run_start", run },
+    { type: "llm_call", run, model: "gpt-4o", prompt, tokens: { input: 500, output: 100 } },
+    { type: "tool_call", run, name: "lookup_order", args: { order_id: "A-1042" } },
+    { type: "output", run, content: output },
+    { type: "run_end", run, status: "ok" },
+  ];
+
+  it("flags a changed prompt and shows both sides", () => {
+    const diff = diffTraces(
+      parseTrace(trace(withPrompt("r", "You are terse.", "ok"))),
+      parseTrace(trace(withPrompt("r", "You are verbose.", "ok"))),
+    );
+    const f = diff.findings.find((x) => x.kind === "prompt_changed");
+    expect(f).toBeDefined();
+    expect(f!.severity).toBe("warning");
+    expect(f!.subject).toBe("prompt");
+    expect(f!.detail?.before).toBe("You are terse.");
+    expect(f!.detail?.after).toBe("You are verbose.");
+  });
+
+  it("stays quiet when the prompt is unchanged", () => {
+    const events = withPrompt("r", "You are terse.", "ok");
+    const diff = diffTraces(parseTrace(trace(events)), parseTrace(trace(events)));
+    expect(diff.findings.some((f) => f.kind === "prompt_changed")).toBe(false);
+  });
+
+  // The point Caleb made: users already suspect the prompt. The value is saying which
+  // downstream changes it plausibly explains, so the finding reads as a cause not a checkbox.
+  it("names what the prompt change plausibly explains", () => {
+    const diff = diffTraces(
+      parseTrace(trace(withPrompt("r", "You are terse.", "Refund issued."))),
+      parseTrace(trace(withPrompt("r", "You are verbose.", "I have issued your refund."))),
+    );
+    const f = diff.findings.find((x) => x.kind === "prompt_changed")!;
+    expect(f.detail?.explains).toEqual(["output"]);
+    expect(f.message).toContain("output");
+  });
+
+  it("reports the prompt change before the effects it explains", () => {
+    const diff = diffTraces(
+      parseTrace(trace(withPrompt("r", "You are terse.", "Refund issued."))),
+      parseTrace(trace(withPrompt("r", "You are verbose.", "I have issued your refund."))),
+    );
+    const kinds = diff.runs[0].findings.map((f) => f.kind);
+    expect(kinds.indexOf("prompt_changed")).toBeLessThan(kinds.indexOf("output_changed"));
+  });
+
+  // Claiming causation with nothing downstream to explain would be overreach.
+  it("does not claim to explain anything when nothing else changed", () => {
+    const diff = diffTraces(
+      parseTrace(trace(withPrompt("r", "You are terse.", "ok"))),
+      parseTrace(trace(withPrompt("r", "You are verbose.", "ok"))),
+    );
+    const f = diff.findings.find((x) => x.kind === "prompt_changed")!;
+    expect(f.detail?.explains).toBeUndefined();
+    expect(f.message).toBe("prompt changed");
+  });
+
+  // A trace that never captured prompts must not read as "the prompt did not change".
+  it("stays quiet when only one side captured a prompt", () => {
+    const diff = diffTraces(
+      parseTrace(trace(withPrompt("r", "You are terse.", "ok"))),
+      parseTrace(
+        trace([
+          { type: "run_start", run: "r" },
+          { type: "llm_call", run: "r", model: "gpt-4o", tokens: { input: 500, output: 100 } },
+          { type: "tool_call", run: "r", name: "lookup_order", args: { order_id: "A-1042" } },
+          { type: "output", run: "r", content: "ok" },
+          { type: "run_end", run: "r", status: "ok" },
+        ]),
+      ),
+    );
+    expect(diff.findings.some((f) => f.kind === "prompt_changed")).toBe(false);
+  });
+
+  it("attributes per llm call when a run has several", () => {
+    const two = (a: string, b: string) => [
+      { type: "run_start", run: "r" },
+      { type: "llm_call", run: "r", model: "gpt-4o", prompt: a },
+      { type: "llm_call", run: "r", model: "gpt-4o", prompt: b },
+      { type: "run_end", run: "r", status: "ok" },
+    ];
+    const diff = diffTraces(
+      parseTrace(trace(two("plan step", "write step"))),
+      parseTrace(trace(two("plan step", "write it differently"))),
+    );
+    const found = diff.findings.filter((f) => f.kind === "prompt_changed");
+    expect(found).toHaveLength(1);
+    expect(found[0].detail?.call).toBe(2);
+  });
+
+  it("reports a prompt that became empty", () => {
+    const diff = diffTraces(
+      parseTrace(trace(withPrompt("r", "You are terse.", "ok"))),
+      parseTrace(trace(withPrompt("r", "", "ok"))),
+    );
+    const f = diff.findings.find((x) => x.kind === "prompt_changed");
+    expect(f).toBeDefined();
+    expect(f!.detail?.before).toBe("You are terse.");
+    expect(f!.detail?.after).toBe("");
+  });
+});
+
+// The failure mode these guard is the report claiming "prompt changed" while printing two
+// lines that look the same, which reads as a bug in the tool rather than a change in the
+// prompt. Either the two sides shown must differ, or the message must say why they cannot.
+describe("prompt diffs a reader can act on", () => {
+  const promptRun = (prompt: string) => [
+    { type: "run_start", run: "r" },
+    { type: "llm_call", run: "r", model: "gpt-4o", prompt },
+    { type: "run_end", run: "r", status: "ok" },
+  ];
+
+  const promptFinding = (before: string, after: string) => {
+    const diff = diffTraces(parseTrace(trace(promptRun(before))), parseTrace(trace(promptRun(after))));
+    return diff.findings.find((f) => f.kind === "prompt_changed");
+  };
+
+  it("names a whitespace-only difference", () => {
+    const f = promptFinding("You are terse.", "You are terse. ")!;
+    expect(f).toBeDefined();
+    expect(f.message).toContain("whitespace only");
+  });
+
+  it("counts a moved line break as whitespace only", () => {
+    const f = promptFinding("Be terse.\nAnswer in English.", "Be terse. Answer in English.")!;
+    expect(f.message).toContain("whitespace only");
+  });
+
+  // prompts are nearly always multi-line, and a raw newline in the excerpt would print the
+  // rest of the prompt with no - or + in front of it
+  it("keeps each side of a multi-line prompt on one line", () => {
+    const f = promptFinding("Be terse.\nAnswer in English.", "Be terse.\nAnswer in French.")!;
+    expect(String(f.detail?.before)).not.toContain("\n");
+    expect(String(f.detail?.before)).toContain("\\n");
+    expect(String(f.detail?.after)).toContain("Answer in French.");
+  });
+
+  it("names a unicode normalisation difference", () => {
+    // the same word in NFC and NFD: identical on screen, different bytes
+    const f = promptFinding("Répondez en café.".normalize("NFC"), "Répondez en café.".normalize("NFD"))!;
+    expect(f).toBeDefined();
+    expect(f.message).toContain("unicode normalisation only");
+  });
+
+  it("treats genuinely different unicode text as an ordinary prompt change", () => {
+    const f = promptFinding("Answer in English.", "Répondez en français. 🙂")!;
+    expect(f.message).toBe("prompt changed");
+    expect(f.detail?.after).toContain("🙂");
+  });
+
+  it("does not call a real edit whitespace only", () => {
+    const f = promptFinding("Refund without asking.", "Always confirm before refunding.")!;
+    expect(f.message).toBe("prompt changed");
+  });
+
+  // A system prompt is usually thousands of characters and the edit is rarely at the top, so
+  // showing the head of each side would print two identical lines.
+  it("shows the part that differs in a long prompt, not the head", () => {
+    const head = "You are a refund agent. ".repeat(40);
+    const f = promptFinding(`${head}Refund without asking.`, `${head}Always confirm first.`)!;
+    expect(f.detail?.before).not.toBe(f.detail?.after);
+    expect(String(f.detail?.before)).toContain("Refund without asking.");
+    expect(String(f.detail?.after)).toContain("Always confirm first.");
+  });
+
+  it("keeps the excerpt short enough to read", () => {
+    const head = "You are a refund agent. ".repeat(40);
+    const tail = " Then thank the customer.".repeat(40);
+    const f = promptFinding(`${head}Refund without asking.${tail}`, `${head}Always confirm first.${tail}`)!;
+    expect(String(f.detail?.before).length).toBeLessThanOrEqual(200);
+    expect(String(f.detail?.after).length).toBeLessThanOrEqual(200);
+  });
+});

@@ -1,0 +1,65 @@
+{
+  "note": "Shared by test/import.test.ts and python/tests/test_recorder.py. The Node and Python recorders must turn the same prompt into the same text, or a baseline recorded in one language and a rerun recorded in the other diffs as a prompt change that never happened.",
+  "cases": [
+    { "name": "plain string", "input": "Be terse.", "expected": "Be terse." },
+    { "name": "string is trimmed", "input": "  Be terse.  ", "expected": "Be terse." },
+    { "name": "empty string is no prompt", "input": "", "expected": null },
+    { "name": "whitespace string is no prompt", "input": "   ", "expected": null },
+    { "name": "null is no prompt", "input": null, "expected": null },
+    { "name": "empty list is no prompt", "input": [], "expected": null },
+    { "name": "empty object is no prompt", "input": {}, "expected": null },
+    {
+      "name": "openai messages",
+      "input": [
+        { "role": "system", "content": "Be terse." },
+        { "role": "user", "content": "Where is order A-1?" }
+      ],
+      "expected": "system: Be terse.\nuser: Where is order A-1?"
+    },
+    {
+      "name": "role is kept",
+      "input": [{ "role": "system", "content": "Be terse." }],
+      "expected": "system: Be terse."
+    },
+    {
+      "name": "content blocks are flattened",
+      "input": [{ "role": "user", "content": [{ "type": "text", "text": "Where is order A-1?" }] }],
+      "expected": "user: Where is order A-1?"
+    },
+    {
+      "name": "messages envelope is unwrapped",
+      "input": { "messages": [{ "role": "user", "content": "Hi" }] },
+      "expected": "user: Hi"
+    },
+    {
+      "name": "json string is unwrapped",
+      "input": "[{\"role\":\"user\",\"content\":\"Hi\"}]",
+      "expected": "user: Hi"
+    },
+    {
+      "name": "langchain tuple form",
+      "input": [["user", "Where is order A-1?"]],
+      "expected": "user: Where is order A-1?"
+    },
+    {
+      "name": "langchain serialised form",
+      "input": [{ "kwargs": { "role": "user", "content": "Hi" } }],
+      "expected": "user: Hi"
+    },
+    {
+      "name": "unicode survives",
+      "input": [{ "role": "user", "content": "Répondez en français. 🙂" }],
+      "expected": "user: Répondez en français. 🙂"
+    },
+    {
+      "name": "unrecognised object falls back to sorted json",
+      "input": { "b": 2, "a": 1 },
+      "expected": "{\"a\":1,\"b\":2}"
+    },
+    {
+      "name": "key order does not change the text",
+      "input": { "a": 1, "b": 2 },
+      "expected": "{\"a\":1,\"b\":2}"
+    }
+  ]
+}

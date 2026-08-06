@@ -10,6 +10,8 @@ export interface LlmCallEvent {
   run: string;
   ts?: number;
   model: string;
+  /** the rendered prompt sent to the model, normalised to text. Absent when the trace did not capture it. */
+  prompt?: string;
   latency_ms?: number;
   tokens?: { input?: number; output?: number };
   cost_usd?: number;
@@ -83,6 +85,7 @@ export interface Finding {
     | "tool_result_changed"
     | "tool_reordered"
     | "tool_error"
+    | "prompt_changed"
     | "output_changed"
     | "output_missing"
     | "latency_regression"

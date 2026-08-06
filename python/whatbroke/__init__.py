@@ -42,6 +42,96 @@ def _safe_parse(raw: Any) -> Optional[dict]:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _prompt_text(value: Any) -> Optional[str]:
+    """Normalise a prompt into the same text the Node recorder writes.
+
+    The two implementations have to agree character for character. A baseline recorded from
+    Python and a rerun recorded from Node would otherwise diff as a prompt change that never
+    happened, which is worse than no prompt diffing at all. See promptText in src/import.ts.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+        except (ValueError, TypeError):
+            return text  # not JSON, so the string is already the prompt
+        if isinstance(parsed, str):
+            return parsed.strip() or None
+        nested = _prompt_text(parsed)
+        return nested if nested is not None else text
+    if isinstance(value, (list, tuple)):
+        parts = [text for text in (_message_text(m) for m in value) if text is not None]
+        return "\n".join(parts) if parts else None
+    if isinstance(value, dict):
+        for key in ("messages", "prompt", "input"):
+            if key in value:
+                nested = _prompt_text(value[key])
+                if nested is not None:
+                    return nested
+        single = _message_text(value)
+        if single is not None:
+            return single
+        # key-order independent, so an SDK reordering its JSON does not read as an edit
+        dumped = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        return None if dumped == "{}" else dumped
+    return None
+
+
+def _message_text(message: Any) -> Optional[str]:
+    """One chat message to text. The role is kept: moving an instruction from system to user
+    is a real change and has to read as one."""
+    if isinstance(message, str):
+        return message.strip() or None
+    # LangChain's tuple form, ("user", "text"), which is what LangSmith stores for chat models
+    if (
+        isinstance(message, (list, tuple))
+        and len(message) == 2
+        and all(isinstance(part, str) for part in message)
+    ):
+        return f"{message[0]}: {message[1]}"
+    if not isinstance(message, dict):
+        return None
+    # LangChain's serialised form nests the real message under kwargs
+    if isinstance(message.get("kwargs"), dict):
+        inner = _message_text(message["kwargs"])
+        if inner is not None:
+            return inner
+    role = message.get("role") if isinstance(message.get("role"), str) else None
+    content = message.get("content")
+    body: Optional[str] = None
+    if isinstance(content, str):
+        body = content
+    else:
+        # content blocks (Anthropic, OpenAI vision) carry the text one level down
+        blocks = content if isinstance(content, list) else None
+        if blocks is not None:
+            texts = []
+            for block in blocks:
+                if isinstance(block, dict) and isinstance(block.get("text"), str):
+                    texts.append(block["text"])
+                elif isinstance(block, dict) and isinstance(block.get("content"), str):
+                    texts.append(block["content"])
+            body = "\n".join(texts) if texts else None
+    if body is None:
+        return None
+    return f"{role}: {body}" if role else body
+
+
+def _anthropic_prompt(params: dict) -> Any:
+    """Anthropic keeps the system prompt out of `messages`, so reading `messages` alone would
+    miss the part people edit most. Put it back at the front as the system turn it is."""
+    messages = params.get("messages")
+    messages = list(messages) if isinstance(messages, (list, tuple)) else []
+    system = params.get("system")
+    if system is None:
+        return messages
+    return [{"role": "system", "content": system}] + messages
+
+
 class Recorder:
     """Writes trace events to a JSONL file, one recorder per scenario run.
 
@@ -70,6 +160,8 @@ class Recorder:
         cost_usd: Optional[float] = None,
         stop_reason: Optional[str] = None,
         error: Optional[str] = None,
+        # last so existing positional calls keep working; normalised to text on the way out
+        prompt: Any = None,
     ) -> None:
         tokens = _clean({"input": input_tokens, "output": output_tokens})
         self._write(
@@ -79,6 +171,7 @@ class Recorder:
                     "run": self.run,
                     "ts": _now_ms(),
                     "model": model,
+                    "prompt": _prompt_text(prompt),
                     "latency_ms": latency_ms,
                     "tokens": tokens or None,
                     "cost_usd": cost_usd,
@@ -136,6 +229,7 @@ class Recorder:
                 input_tokens=getattr(usage, "prompt_tokens", None),
                 output_tokens=getattr(usage, "completion_tokens", None),
                 stop_reason=getattr(first, "finish_reason", None),
+                prompt=params.get("messages"),
             )
             message = getattr(first, "message", None)
             for call in getattr(message, "tool_calls", None) or []:
@@ -150,6 +244,7 @@ class Recorder:
                 model=params.get("model") or "unknown",
                 latency_ms=round((time.time() - started) * 1000),
                 error=str(err),
+                prompt=params.get("messages"),
             )
 
         if inspect.iscoroutinefunction(original):
@@ -197,6 +292,7 @@ class Recorder:
                 input_tokens=getattr(usage, "input_tokens", None),
                 output_tokens=getattr(usage, "output_tokens", None),
                 stop_reason=getattr(response, "stop_reason", None),
+                prompt=_anthropic_prompt(params),
             )
             content = getattr(response, "content", None)
             for block in content if isinstance(content, list) else []:
@@ -212,6 +308,7 @@ class Recorder:
                 model=params.get("model") or "unknown",
                 latency_ms=round((time.time() - started) * 1000),
                 error=str(err),
+                prompt=_anthropic_prompt(params),
             )
 
         if inspect.iscoroutinefunction(original):

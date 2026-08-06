@@ -290,7 +290,116 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     });
   }
 
+  // Prompt, last so it can see what else moved, then hoisted to the front so it reads as the
+  // cause rather than another symptom. Users already suspect the prompt; the useful part is
+  // saying which of the changes below it plausibly accounts for.
+  const promptFindings: Finding[] = [];
+  const calls = Math.min(before.llmCalls.length, after.llmCalls.length);
+  for (let i = 0; i < calls; i++) {
+    const promptBefore = before.llmCalls[i].prompt;
+    const promptAfter = after.llmCalls[i].prompt;
+    // one side missing means the trace never captured it, which is not evidence of no change
+    if (promptBefore === undefined || promptAfter === undefined) continue;
+    if (promptBefore === promptAfter) continue;
+    const explains = [
+      ...new Set(
+        findings
+          .filter((f) => PROMPT_CAN_EXPLAIN.has(f.kind) && f.subject)
+          .map((f) => f.subject as string),
+      ),
+    ];
+    const excerpts = promptExcerpts(promptBefore, promptAfter);
+    const detail: Record<string, unknown> = {
+      call: i + 1,
+      before: excerpts.before,
+      after: excerpts.after,
+    };
+    if (explains.length) detail.explains = explains;
+    const notes: string[] = [];
+    const shape = differenceShape(promptBefore, promptAfter);
+    if (shape) notes.push(shape);
+    if (explains.length) notes.push(`plausibly explains: ${explains.join(", ")}`);
+    promptFindings.push({
+      severity: "warning",
+      kind: "prompt_changed",
+      subject: "prompt",
+      run: runId,
+      message: notes.length ? `prompt changed (${notes.join("; ")})` : "prompt changed",
+      detail,
+    });
+  }
+  findings.unshift(...promptFindings);
+
   return { run: runId, findings, before: sBefore, after: sAfter };
+}
+
+/**
+ * Changes a prompt edit can plausibly cause. Deliberately excludes tool_result_changed, which
+ * is the tool or the world answering differently, and the cost/latency/token findings, which
+ * follow from the others rather than from the prompt directly.
+ */
+const PROMPT_CAN_EXPLAIN = new Set<Finding["kind"]>([
+  "tool_added",
+  "tool_removed",
+  "tool_reordered",
+  "tool_args_changed",
+  "output_changed",
+  "output_missing",
+]);
+
+/**
+ * Both sides of a prompt change, cut down to the part that differs.
+ *
+ * Showing the head of each side is no use here: a system prompt runs to thousands of
+ * characters and the edit is rarely at the top, so the report would print two identical
+ * looking lines under a finding that says something changed.
+ */
+function promptExcerpts(before: string, after: string): { before: string; after: string } {
+  // one line per side, or the - and + gutters stop lining up: prompts are nearly always
+  // multi-line, and this is display text already, not the prompt itself
+  const a = oneLine(before);
+  const b = oneLine(after);
+  const shortest = Math.min(a.length, b.length);
+  let at = 0;
+  while (at < shortest && a[at] === b[at]) at++;
+  // keep a little of the text they still share, so the excerpt has somewhere to stand
+  const from = Math.max(0, at - PROMPT_EXCERPT_LEAD);
+  return { before: excerpt(a, from), after: excerpt(b, from) };
+}
+
+function oneLine(s: string): string {
+  return s.replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
+}
+
+const PROMPT_EXCERPT_LEAD = 40;
+const PROMPT_EXCERPT_WIDTH = 160;
+
+function excerpt(s: string, from: number): string {
+  const start = backOffSurrogate(s, from);
+  let end = Math.min(s.length, start + PROMPT_EXCERPT_WIDTH);
+  end = backOffSurrogate(s, end);
+  return (start > 0 ? "…" : "") + s.slice(start, end) + (end < s.length ? "…" : "");
+}
+
+/** never cut through a surrogate pair, which would print as a replacement character */
+function backOffSurrogate(s: string, i: number): number {
+  const code = s.charCodeAt(i);
+  return i > 0 && i < s.length && code >= 0xdc00 && code <= 0xdfff ? i - 1 : i;
+}
+
+/**
+ * Why two prompts that differ can still print the same. Saying "prompt changed" above two
+ * lines a reader cannot tell apart looks like a bug in the tool, so name the reason instead.
+ * Both cases are real changes: whitespace and normal form both move the tokens.
+ */
+function differenceShape(before: string, after: string): string | undefined {
+  if (before.normalize("NFC") === after.normalize("NFC")) return "unicode normalisation only";
+  if (collapseSpace(before) === collapseSpace(after)) return "whitespace only";
+  return undefined;
+}
+
+function collapseSpace(s: string): string {
+  return s.normalize("NFC").replace(/\s+/g, " ").trim();
 }
 
 function pick(

@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { promptText } from "./import.js";
 import type { TraceEvent } from "./types.js";
 
 export interface RecorderOptions {
@@ -31,6 +32,8 @@ export class Recorder {
 
   llmCall(data: {
     model: string;
+    /** the rendered prompt, in whatever shape the SDK takes it; normalised to text here */
+    prompt?: unknown;
     latencyMs?: number;
     inputTokens?: number;
     outputTokens?: number;
@@ -43,6 +46,7 @@ export class Recorder {
       run: this.run,
       ts: Date.now(),
       model: data.model,
+      prompt: promptText(data.prompt),
       latency_ms: data.latencyMs,
       tokens: { input: data.inputTokens, output: data.outputTokens },
       cost_usd: data.costUsd,
@@ -90,6 +94,7 @@ export class Recorder {
         const response = await original(params, ...rest);
         recorder.llmCall({
           model: response?.model ?? params?.model ?? "unknown",
+          prompt: params?.messages,
           latencyMs: Date.now() - started,
           inputTokens: response?.usage?.prompt_tokens,
           outputTokens: response?.usage?.completion_tokens,
@@ -103,6 +108,7 @@ export class Recorder {
       } catch (err) {
         recorder.llmCall({
           model: params?.model ?? "unknown",
+          prompt: params?.messages,
           latencyMs: Date.now() - started,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -130,6 +136,7 @@ export class Recorder {
         const response = await original(params, ...rest);
         recorder.llmCall({
           model: response?.model ?? params?.model ?? "unknown",
+          prompt: anthropicPrompt(params),
           latencyMs: Date.now() - started,
           inputTokens: response?.usage?.input_tokens,
           outputTokens: response?.usage?.output_tokens,
@@ -145,6 +152,7 @@ export class Recorder {
       } catch (err) {
         recorder.llmCall({
           model: params?.model ?? "unknown",
+          prompt: anthropicPrompt(params),
           latencyMs: Date.now() - started,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -153,6 +161,16 @@ export class Recorder {
     };
     return client;
   }
+}
+
+/**
+ * Anthropic keeps the system prompt out of `messages`, so reading `messages` alone would miss
+ * the part people edit most. Put it back at the front as the system turn it is.
+ */
+export function anthropicPrompt(params: any): unknown {
+  const messages = Array.isArray(params?.messages) ? params.messages : [];
+  if (params?.system === undefined || params?.system === null) return messages;
+  return [{ role: "system", content: params.system }, ...messages];
 }
 
 function safeParse(json: unknown): Record<string, unknown> | undefined {

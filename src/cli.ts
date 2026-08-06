@@ -89,7 +89,7 @@ and diff will report a flap rate per finding instead of noise.
 
 trace format: one JSON event per line
   {"type":"run_start","run":"refund-flow","meta":{"model":"gpt-4o"}}
-  {"type":"llm_call","run":"refund-flow","model":"gpt-4o","latency_ms":900,"tokens":{"input":512,"output":128}}
+  {"type":"llm_call","run":"refund-flow","model":"gpt-4o","prompt":"system: You are a refund agent.","latency_ms":900,"tokens":{"input":512,"output":128}}
   {"type":"tool_call","run":"refund-flow","name":"lookup_order","args":{"order_id":"A-1042"}}
   {"type":"output","run":"refund-flow","content":"Refund issued."}
   {"type":"run_end","run":"refund-flow","status":"ok"}

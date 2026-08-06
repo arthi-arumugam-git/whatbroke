@@ -58,8 +58,41 @@ whatbroke aligns runs by id, aligns tool calls within each run, and reports:
 | Finding | Severity |
 |---|---|
 | Run started failing, tool call dropped, tool now errors, output gone, run missing | breaking |
-| Tool args changed, new tool calls, tools reordered, output changed, latency or cost regression | changed |
+| Prompt changed, tool args changed, new tool calls, tools reordered, output changed, latency or cost regression | changed |
 | Model changed, large token swings, run now succeeds | info |
+
+### The prompt comes first
+
+Most behavior changes come from a prompt edit, so a report that lists the symptoms and stays
+quiet about the cause makes you go and find it by hand. When the prompt moved, whatbroke puts
+it at the top of the run and names what it plausibly accounts for:
+
+```
+BROKE tr_1
+  ! prompt changed (plausibly explains: issue_refund, output)
+      - system: You are a refund agent. Refund without asking.
+      + system: You are a refund agent. Always confirm with the customer before refunding.
+  x tool call dropped: issue_refund
+  ! final output changed
+```
+
+"Plausibly" is doing real work there: it covers tool and output changes, and deliberately not
+tool *results*, which are the tool or the world answering differently, nor cost and latency,
+which follow from the other changes rather than from the prompt. If a trace never captured
+prompts the import says so under `not in the source`, because silence would otherwise read as
+"the prompt didn't change", the one conclusion that trace cannot support.
+
+System prompts are long and the edit is rarely at the top, so the two lines show the part that
+actually differs rather than the first hundred characters both sides share. When the change is
+one the lines cannot show, the finding says which it was: `prompt changed (whitespace only)` or
+`prompt changed (unicode normalisation only)`. Both retokenise the prompt, so both are reported,
+but neither is left looking like a bug in the diff.
+
+Prompts come through every capture path: `whatbroke record`, the Node and Python recorders'
+client wrappers, and all three import formats. Anthropic's `system` field is folded back in as
+the system turn, since that is the part people edit most. The Node and Python recorders run the
+same normalisation fixture, so a baseline recorded in one and a rerun recorded in the other do
+not diff as a prompt change that never happened.
 
 Exit code is 1 when something breaking shows up, so you can put it straight into CI:
 
@@ -92,7 +125,7 @@ The trace format is deliberately boring: JSONL you can write from any language i
 
 ```jsonl
 {"type":"run_start","run":"refund-flow","meta":{"model":"gpt-4o"}}
-{"type":"llm_call","run":"refund-flow","model":"gpt-4o","latency_ms":900,"tokens":{"input":512,"output":128},"cost_usd":0.004}
+{"type":"llm_call","run":"refund-flow","model":"gpt-4o","prompt":"system: You are a refund agent.\nuser: Where is order A-1042?","latency_ms":900,"tokens":{"input":512,"output":128},"cost_usd":0.004}
 {"type":"tool_call","run":"refund-flow","name":"lookup_order","args":{"order_id":"A-1042"}}
 {"type":"output","run":"refund-flow","content":"Refund issued."}
 {"type":"run_end","run":"refund-flow","status":"ok"}
@@ -158,7 +191,7 @@ whatbroke import traces-export.json
 whatbroke diff baseline.whatbroke.jsonl current.whatbroke.jsonl
 ```
 
-The format is detected from the file. `--format otel|langfuse|langsmith` forces it, `--run <name>` sets the run name, `-o` picks the output path. The import prints what the source didn't carry (cost, tool args) so you know which findings can't show up.
+The format is detected from the file. `--format otel|langfuse|langsmith` forces it, `--run <name>` sets the run name, `-o` picks the output path. The import prints what the source didn't carry (cost, tool args, prompts) so you know which findings can't show up.
 
 ### OpenTelemetry
 
@@ -218,7 +251,7 @@ whatbroke check baseline.jsonl --init
 
 That writes a starter contract with the tools every sample called, cost/latency budgets at observed-max plus 50%, and expected status. Review the budgets, commit it, done.
 
-The report prints the contract's hash, so a CI log always shows exactly which version of the rules a run was held to — when a check starts failing you can tell "the agent changed" apart from "someone changed the contract". Sampled traces (`name#1`, `name#2`, ...) report a violation rate per rule instead of a flat fail.
+The report prints the contract's hash, so a CI log always shows exactly which version of the rules a run was held to: when a check starts failing you can tell "the agent changed" apart from "someone changed the contract". Sampled traces (`name#1`, `name#2`, ...) report a violation rate per rule instead of a flat fail.
 
 Exit code 1 on any violation (`--fail-on never` to disable), `--md` and `--json` output like everything else.
 
