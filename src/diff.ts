@@ -2,6 +2,7 @@ import type {
   DiffOptions,
   DiffResult,
   Finding,
+  LlmCallEvent,
   Run,
   RunDiff,
   RunStats,
@@ -34,24 +35,21 @@ function stats(run: Run): RunStats {
   };
 }
 
-/** longest common subsequence over tool names; returns aligned index pairs */
-function alignTools(a: ToolCallEvent[], b: ToolCallEvent[]): Array<[number, number]> {
+/** longest common subsequence over keys; returns aligned index pairs */
+function lcsPairs(a: string[], b: string[]): Array<[number, number]> {
   const n = a.length;
   const m = b.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] =
-        a[i].name === b[j].name
-          ? dp[i + 1][j + 1] + 1
-          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
   const pairs: Array<[number, number]> = [];
   let i = 0;
   let j = 0;
   while (i < n && j < m) {
-    if (a[i].name === b[j].name) {
+    if (a[i] === b[j]) {
       pairs.push([i, j]);
       i++;
       j++;
@@ -62,6 +60,146 @@ function alignTools(a: ToolCallEvent[], b: ToolCallEvent[]): Array<[number, numb
     }
   }
   return pairs;
+}
+
+function alignTools(a: ToolCallEvent[], b: ToolCallEvent[]): Array<[number, number]> {
+  return lcsPairs(
+    a.map((t) => t.name),
+    b.map((t) => t.name),
+  );
+}
+
+/**
+ * Align the llm calls of two runs.
+ *
+ * Pairing by index is wrong the moment a run gains or loses a call: everything after the
+ * insertion shifts by one, and a prompt diff over those pairs reports a run of edits that
+ * nobody made. So identical prompts anchor the alignment first, exactly as a text diff
+ * anchors on identical lines, and only the calls between two anchors are matched by
+ * similarity. A call left over in a gap is one that appeared or vanished.
+ *
+ * A call with no prompt can only be told apart by its model, which is usually the same for
+ * every call in the run. The alignment then degrades to order, and the findings say so.
+ */
+function alignLlmCalls(a: LlmCallEvent[], b: LlmCallEvent[]): Array<[number, number]> {
+  const anchors = lcsPairs(a.map(callKey), b.map(callKey));
+  const pairs: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  // the sentinel closes the gap after the last anchor
+  for (const [ai, aj] of [...anchors, [a.length, b.length] as [number, number]]) {
+    pairs.push(...alignGap(a, b, i, ai, j, aj));
+    if (ai < a.length && aj < b.length) pairs.push([ai, aj]);
+    i = ai + 1;
+    j = aj + 1;
+  }
+  return pairs;
+}
+
+/** what makes two llm calls the same call. The prompt when there is one, the model otherwise */
+function callKey(call: LlmCallEvent): string {
+  return call.prompt === undefined ? `model:${call.model}` : `prompt:${call.prompt}`;
+}
+
+/**
+ * Match the calls between two anchors. Nothing in here is identical, so pairs are chosen to
+ * maximise total similarity, and a call is only left unpaired when pairing it would score
+ * worse than admitting it has no counterpart.
+ */
+function alignGap(
+  a: LlmCallEvent[],
+  b: LlmCallEvent[],
+  i0: number,
+  i1: number,
+  j0: number,
+  j1: number,
+): Array<[number, number]> {
+  const n = i1 - i0;
+  const m = j1 - j0;
+  if (n <= 0 || m <= 0) return [];
+  // every prompt is split once and every pair scored once: prompts run to thousands of words
+  // and the table below reads each cell twice
+  const wordsBefore = a
+    .slice(i0, i1)
+    .map((c) => (c.prompt === undefined ? undefined : words(c.prompt)));
+  const wordsAfter = b
+    .slice(j0, j1)
+    .map((c) => (c.prompt === undefined ? undefined : words(c.prompt)));
+  const sims: number[][] = Array.from({ length: n }, (_, i) =>
+    Array.from({ length: m }, (_, j) => {
+      const wa = wordsBefore[i];
+      const wb = wordsAfter[j];
+      // with no prompt on one side, the model is the only thing left to compare
+      if (!wa || !wb) return a[i0 + i].model === b[j0 + j].model ? 1 : 0;
+      return overlap(wa, wb);
+    }),
+  );
+  const sim = (i: number, j: number) => sims[i][j];
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n; i >= 0; i--) {
+    for (let j = m; j >= 0; j--) {
+      if (i === n && j === m) continue;
+      if (i === n) dp[i][j] = dp[i][j + 1] - UNPAIRED_CALL_PENALTY;
+      else if (j === m) dp[i][j] = dp[i + 1][j] - UNPAIRED_CALL_PENALTY;
+      else
+        dp[i][j] = Math.max(
+          sim(i, j) + dp[i + 1][j + 1],
+          dp[i + 1][j] - UNPAIRED_CALL_PENALTY,
+          dp[i][j + 1] - UNPAIRED_CALL_PENALTY,
+        );
+    }
+  }
+  const pairs: Array<[number, number]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    const paired = sim(i, j) + dp[i + 1][j + 1];
+    // ties go to the pair, which keeps calls the aligner cannot tell apart in their own order
+    if (
+      paired >= dp[i + 1][j] - UNPAIRED_CALL_PENALTY &&
+      paired >= dp[i][j + 1] - UNPAIRED_CALL_PENALTY
+    ) {
+      pairs.push([i0 + i, j0 + j]);
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return pairs;
+}
+
+/**
+ * What it costs to say a call has no counterpart. Two of these are spent to leave a pair
+ * unpaired, so a pair whose prompts have more than a fifth of their words in common is kept
+ * as one changed call rather than reported as a drop and an add.
+ */
+const UNPAIRED_CALL_PENALTY = 0.1;
+
+/**
+ * How much two prompts have in common, 0 to 1, by shared words. This only decides which calls
+ * to pair. What gets reported as changed is always the exact text.
+ */
+function overlap(a: string[], b: string[]): number {
+  if (!a.length && !b.length) return 1;
+  if (!a.length || !b.length) return 0;
+  const pool = new Map<string, number>();
+  for (const w of a) pool.set(w, (pool.get(w) ?? 0) + 1);
+  let shared = 0;
+  for (const w of b) {
+    const left = pool.get(w) ?? 0;
+    if (left > 0) {
+      shared++;
+      pool.set(w, left - 1);
+    }
+  }
+  return (2 * shared) / (a.length + b.length);
+}
+
+function words(s: string): string[] {
+  return s.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
 function changedKeys(
@@ -290,41 +428,135 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
     });
   }
 
-  // Prompt, last so it can see what else moved, then hoisted to the front so it reads as the
-  // cause rather than another symptom. Users already suspect the prompt; the useful part is
-  // saying which of the changes below it plausibly accounts for.
+  // Structure and prompt, computed last so they can see what else moved, then hoisted to the
+  // front so they read as causes rather than more symptoms. Structure goes above the prompt
+  // findings because it decides which prompt was compared with which.
+  const pairedCalls = alignLlmCalls(before.llmCalls, after.llmCalls);
+  const beforeCalls = before.llmCalls.length;
+  const afterCalls = after.llmCalls.length;
+  // With no prompt on either side the aligner has only the model to go on, and every call in a
+  // run usually runs the same model. The position it reports is then the order the calls
+  // arrived in, which is a weaker claim than "this is the call that appeared"
+  const byArrivalOrder =
+    !before.llmCalls.some((c) => c.prompt !== undefined) ||
+    !after.llmCalls.some((c) => c.prompt !== undefined);
+
+  const structureFindings: Finding[] = [];
+  // A run with no llm calls on one side has not told us the agent stopped calling the model,
+  // it has told us the trace did not carry them. Reporting every call as dropped would be the
+  // capture's gap printed as the agent's behavior.
+  if (beforeCalls && afterCalls) {
+    // A call that appeared or vanished accounts for the run's model list moving only if the
+    // list would have held without it. A run that swapped every call to a new model moved that
+    // list on its own, and blaming the one dropped call for it would be a false cause
+    const modelsWithout = (calls: LlmCallEvent[], skip: number) =>
+      [...new Set(calls.filter((_, k) => k !== skip).map((c) => c.model))].join(",");
+    const structureExplains = (explainsModel: boolean) =>
+      explainedBy(
+        findings.filter((f) => f.kind !== "model_changed" || explainsModel),
+        STRUCTURE_CAN_EXPLAIN,
+      );
+    const notes = (position: number, of: number, explains: string[]) => {
+      const parts = [`position ${position} of ${of}`];
+      if (byArrivalOrder) parts.push("matched by position: the trace did not capture prompts");
+      if (explains.length) parts.push(`plausibly explains: ${explains.join(", ")}`);
+      return parts.join("; ");
+    };
+    const structureDetail = (
+      position: number,
+      of: number,
+      explains: string[],
+    ): Record<string, unknown> => {
+      const detail: Record<string, unknown> = { call: position, of };
+      if (explains.length) detail.explains = explains;
+      return detail;
+    };
+
+    const pairedBefore = new Set(pairedCalls.map(([i]) => i));
+    const pairedAfter = new Set(pairedCalls.map(([, j]) => j));
+    for (let i = 0; i < beforeCalls; i++) {
+      if (pairedBefore.has(i)) continue;
+      const call = before.llmCalls[i];
+      const heldTheModel = modelsWithout(before.llmCalls, i) === sAfter.models.join(",");
+      const explains = structureExplains(heldTheModel);
+      const detail = structureDetail(i + 1, beforeCalls, explains);
+      if (call.prompt !== undefined) detail.before = truncate(oneLine(call.prompt));
+      structureFindings.push({
+        severity: "warning",
+        kind: "llm_call_removed",
+        subject: `llm_call:${call.model}`,
+        run: runId,
+        message: `llm call dropped: ${call.model} (${notes(i + 1, beforeCalls, explains)})`,
+        detail,
+      });
+    }
+    for (let j = 0; j < afterCalls; j++) {
+      if (pairedAfter.has(j)) continue;
+      const call = after.llmCalls[j];
+      const broughtTheModel = modelsWithout(after.llmCalls, j) === sBefore.models.join(",");
+      const explains = structureExplains(broughtTheModel);
+      const detail = structureDetail(j + 1, afterCalls, explains);
+      if (call.prompt !== undefined) detail.after = truncate(oneLine(call.prompt));
+      structureFindings.push({
+        severity: "warning",
+        kind: "llm_call_added",
+        subject: `llm_call:${call.model}`,
+        run: runId,
+        message: `new llm call: ${call.model} (${notes(j + 1, afterCalls, explains)})`,
+        detail,
+      });
+    }
+
+    // A run that swapped model everywhere is already one model_changed finding above. Saying
+    // it again once per call turns one fact into several and names nothing new. It is worth a
+    // finding when only some calls moved, because then the run-level one cannot say which
+    const swaps = pairedCalls.filter(
+      ([i, j]) => before.llmCalls[i].model !== after.llmCalls[j].model,
+    );
+    if (swaps.length && swaps.length < pairedCalls.length) {
+      for (const [i, j] of swaps) {
+        structureFindings.push({
+          severity: "info",
+          kind: "llm_call_changed",
+          subject: `llm_call_model:${before.llmCalls[i].model}`,
+          run: runId,
+          message:
+            `llm call ${j + 1} of ${afterCalls} changed model: ` +
+            `${before.llmCalls[i].model} -> ${after.llmCalls[j].model}`,
+          detail: {
+            call: j + 1,
+            of: afterCalls,
+            before: before.llmCalls[i].model,
+            after: after.llmCalls[j].model,
+          },
+        });
+      }
+    }
+  }
+
+  // Users already suspect the prompt; the useful part is saying which of the changes below it
+  // plausibly accounts for.
   const promptFindings: Finding[] = [];
-  const calls = Math.min(before.llmCalls.length, after.llmCalls.length);
-  for (let i = 0; i < calls; i++) {
+  for (const [i, j] of pairedCalls) {
     const promptBefore = before.llmCalls[i].prompt;
-    const promptAfter = after.llmCalls[i].prompt;
+    const promptAfter = after.llmCalls[j].prompt;
     // one side missing means the trace never captured it, which is not evidence of no change
     if (promptBefore === undefined || promptAfter === undefined) continue;
     if (promptBefore === promptAfter) continue;
-    const explains = [
-      ...new Set(
-        findings
-          .filter((f) => PROMPT_CAN_EXPLAIN.has(f.kind) && f.subject)
-          .map((f) => f.subject as string),
-      ),
-    ];
+    const explains = explainedBy(findings, PROMPT_CAN_EXPLAIN);
     const excerpts = promptExcerpts(promptBefore, promptAfter);
     const detail: Record<string, unknown> = {
-      call: i + 1,
+      call: j + 1,
       before: excerpts.before,
       after: excerpts.after,
     };
+    if (i !== j) detail.baselineCall = i + 1;
     if (explains.length) detail.explains = explains;
     const notes: string[] = [];
     const shape = differenceShape(promptBefore, promptAfter);
     if (shape) notes.push(shape);
-    // prompts are paired by position, so a run that gained or lost a call may have shifted
-    // every pair after it. Say so rather than let the reader trust the pairing
-    if (before.llmCalls.length !== after.llmCalls.length) {
-      notes.push(
-        `${before.llmCalls.length} -> ${after.llmCalls.length} llm calls, matched by position`,
-      );
-    }
+    // the call moved, so the reader cannot assume this is the same step in the same place
+    if (i !== j) notes.push(`baseline call ${i + 1} is now call ${j + 1}`);
     if (explains.length) notes.push(`plausibly explains: ${explains.join(", ")}`);
     promptFindings.push({
       severity: "warning",
@@ -335,9 +567,20 @@ function diffRun(runId: string, before: Run, after: Run, opts: Required<DiffOpti
       detail,
     });
   }
+
   findings.unshift(...promptFindings);
+  findings.unshift(...structureFindings);
 
   return { run: runId, findings, before: sBefore, after: sAfter };
+}
+
+/** the subjects of the findings a cause of this kind can be offered as an explanation for */
+function explainedBy(findings: Finding[], kinds: Set<Finding["kind"]>): string[] {
+  return [
+    ...new Set(
+      findings.filter((f) => kinds.has(f.kind) && f.subject).map((f) => f.subject as string),
+    ),
+  ];
 }
 
 /**
@@ -352,6 +595,20 @@ const PROMPT_CAN_EXPLAIN = new Set<Finding["kind"]>([
   "tool_args_changed",
   "output_changed",
   "output_missing",
+]);
+
+/**
+ * Changes a call appearing or vanishing can plausibly cause. Everything a prompt edit can
+ * cause, plus the meters: a call the run did not make before brings its own tokens, its own
+ * cost and its own latency with it, and a new call on a different model is why the run's model
+ * list moved.
+ */
+const STRUCTURE_CAN_EXPLAIN = new Set<Finding["kind"]>([
+  ...PROMPT_CAN_EXPLAIN,
+  "latency_regression",
+  "cost_increase",
+  "token_change",
+  "model_changed",
 ]);
 
 /**

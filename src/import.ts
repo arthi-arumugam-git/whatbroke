@@ -210,6 +210,9 @@ function assemble(
   }
 
   const missing: string[] = [];
+  // the diff stays silent about calls appearing or vanishing when one side has none, because a
+  // source that carried no llm calls has not shown that the agent stopped calling the model
+  if (!llmCalls) missing.push("llm calls");
   if (llmCalls && !tally.sawTokens) missing.push("tokens");
   if (llmCalls && !tally.sawCost) missing.push("cost");
   if (toolCalls && !tally.sawArgs) missing.push("tool args");

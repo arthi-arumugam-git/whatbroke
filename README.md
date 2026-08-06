@@ -53,13 +53,13 @@ node dist/cli.js diff examples/support-agent-gpt4o.jsonl examples/support-agent-
 3. Record a trace of the new version doing the same job.
 4. `whatbroke diff old.jsonl new.jsonl`
 
-whatbroke aligns runs by id, aligns tool calls within each run, and reports:
+whatbroke aligns runs by id, aligns the tool calls and the llm calls within each run, and reports:
 
 | Finding | Severity |
 |---|---|
 | Run started failing, tool call dropped, tool now errors, output gone, run missing | breaking |
-| Prompt changed, tool args changed, new tool calls, tools reordered, output changed, latency or cost regression | changed |
-| Model changed, large token swings, run now succeeds | info |
+| Prompt changed, llm call added or dropped, tool args changed, new tool calls, tools reordered, output changed, latency or cost regression | changed |
+| Model changed, one call's model changed, large token swings, run now succeeds | info |
 
 ### The prompt comes first
 
@@ -93,6 +93,40 @@ client wrappers, and all three import formats. Anthropic's `system` field is fol
 the system turn, since that is the part people edit most. The Node and Python recorders run the
 same normalisation fixture, so a baseline recorded in one and a rerun recorded in the other do
 not diff as a prompt change that never happened.
+
+### Then the node that appeared
+
+The other thing people check is whether a step they added or edited is what moved the numbers.
+A new llm call used to show up only as `2 -> 3 llm calls` in the stat line, which is the kind of
+number that changes without anyone noticing. It is a finding now, and it says what the new call
+brought with it:
+
+```
+BROKE refund-flow
+  2 -> 1 tool calls  ·  2 -> 3 llm calls  ·  1.7s -> 2.5s  ·  $0.0102 -> $0.0151
+  ! new llm call: gpt-4o (position 2 of 3; plausibly explains: issue_refund, output, latency, cost)
+      + You are a refund agent for an online store. Be brief and use the tools you are given. Check the account against the frau…
+  x tool call dropped: issue_refund
+  ! final output changed
+  ! cost up 48% ($0.0102 -> $0.0151)
+```
+
+A call that appeared can explain more than a prompt edit can: it brings its own tokens, its own
+cost and its own latency, so those are on its list where they are not on the prompt's.
+
+Getting this right matters more than it looks. Prompts used to be compared by index, so one call
+inserted at the top shifted every pair after it and printed a run of prompt edits nobody made.
+Identical prompts now anchor the alignment the way a text diff anchors on identical lines, and
+only the calls between two anchors are matched by how much text they share. A call left over is
+one that appeared or vanished, and a prompt that moved says which baseline call it came from.
+When a trace carries no prompts there is nothing but the model to align on, so the finding says
+the position is the order the calls arrived in rather than presenting it as identification.
+
+Two claims it will not make. A trace with no llm calls on one side has not shown that the agent
+stopped calling the model, so nothing is reported as dropped and the import says `llm calls`
+under `not in the source` instead. And a run that swapped every call
+to a new model is one model change, not one per call: the per-call finding appears only when
+some calls moved and others did not, which is the case the run-level one cannot describe.
 
 Exit code is 1 when something breaking shows up, so you can put it straight into CI:
 
@@ -191,7 +225,7 @@ whatbroke import traces-export.json
 whatbroke diff baseline.whatbroke.jsonl current.whatbroke.jsonl
 ```
 
-The format is detected from the file. `--format otel|langfuse|langsmith` forces it, `--run <name>` sets the run name, `-o` picks the output path. The import prints what the source didn't carry (cost, tool args, prompts) so you know which findings can't show up.
+The format is detected from the file. `--format otel|langfuse|langsmith` forces it, `--run <name>` sets the run name, `-o` picks the output path. The import prints what the source didn't carry (cost, tool args, prompts, llm calls) so you know which findings can't show up.
 
 ### OpenTelemetry
 

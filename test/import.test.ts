@@ -738,6 +738,18 @@ describe("prompt capture", () => {
     expect(result.missing).toContain("prompts");
   });
 
+  // The diff will not say a call was added or dropped when one side carried none, so the
+  // import has to be the place that says the source had none.
+  it("reports llm calls as missing when the source carried none", () => {
+    const result = importTrace(otlp([TOOL_SPAN]), "otel");
+    expect(result.llmCalls).toBe(0);
+    expect(result.missing).toContain("llm calls");
+  });
+
+  it("does not report llm calls as missing when the source carried one", () => {
+    expect(importTrace(otlp([CHAT_SPAN]), "otel").missing).not.toContain("llm calls");
+  });
+
   it("does not report prompts as missing once one is captured", () => {
     const result = importTrace(JSON.stringify([LANGFUSE_GENERATION]), "langfuse");
     expect(result.missing).not.toContain("prompts");
