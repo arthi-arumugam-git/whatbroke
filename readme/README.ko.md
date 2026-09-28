@@ -164,9 +164,9 @@ whatbroke record --out <trace.jsonl>
 
 - [x] 멀티 샘플 실행. 변덕스러운 동작을 노이즈 대신 발생률로 표시
 - [x] 프록시 캡처 (`whatbroke record`). 코드를 건드리지 않고 trace 확보
-- [ ] LangSmith와 Langfuse trace 내보내기용 임포터
-- [ ] Python 레코더
-- [ ] `whatbroke watch`. 반복 작업 중 베이스라인과 자동 diff
+- [x] LangSmith와 Langfuse trace 내보내기용 임포터
+- [x] Python 레코더
+- [x] `whatbroke watch`. 반복 작업 중 베이스라인과 자동 diff
 - [ ] 의미 기반 출력 비교 (옵트인, 본인 키 사용)
 
 이슈와 PR 환영합니다. whatbroke가 당신의 에이전트에서 조용히 망가진 무언가를 잡아냈다면, 정말로 그 이야기를 듣고 싶습니다.

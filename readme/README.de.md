@@ -164,9 +164,9 @@ Deterministisch, offline, keine API-Keys, keine Konten. Deine Traces verlassen n
 
 - [x] Multi-Sample-Läufe, damit launisches Verhalten als Rate statt als Rauschen erscheint
 - [x] Proxy-Aufzeichnung (`whatbroke record`), Traces ohne deinen Code anzufassen
-- [ ] Importer für LangSmith- und Langfuse-Trace-Exporte
-- [ ] Python-Recorder
-- [ ] `whatbroke watch` zum automatischen Diffen gegen eine Baseline beim Iterieren
+- [x] Importer für LangSmith- und Langfuse-Trace-Exporte
+- [x] Python-Recorder
+- [x] `whatbroke watch` zum automatischen Diffen gegen eine Baseline beim Iterieren
 - [ ] Semantischer Ausgabenvergleich (Opt-in, eigener Key)
 
 Issues und PRs willkommen. Wenn whatbroke etwas erwischt hat, das in deinem Agenten still kaputtging, würde ich das wirklich gern hören.

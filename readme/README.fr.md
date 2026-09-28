@@ -164,9 +164,9 @@ Déterministe, hors ligne, pas de clé API, pas de compte. Vos traces ne quitten
 
 - [x] Exécutions multi-échantillons, pour que l'instabilité apparaisse comme un taux et non du bruit
 - [x] Capture par proxy (`whatbroke record`), des traces sans toucher à votre code
-- [ ] Importeurs pour les exports de traces LangSmith et Langfuse
-- [ ] Enregistreur Python
-- [ ] `whatbroke watch` pour comparer automatiquement à une référence pendant que vous itérez
+- [x] Importeurs pour les exports de traces LangSmith et Langfuse
+- [x] Enregistreur Python
+- [x] `whatbroke watch` pour comparer automatiquement à une référence pendant que vous itérez
 - [ ] Comparaison sémantique des sorties (opt-in, avec votre propre clé)
 
 Issues et PR bienvenues. Si whatbroke a attrapé quelque chose qui cassait en silence dans votre agent, j'aimerais sincèrement le savoir.

@@ -164,9 +164,9 @@ whatbroke record --out <trace.jsonl>
 
 - [x] 多样本运行，把不稳定行为呈现为出现率而不是噪声
 - [x] 代理录制（`whatbroke record`），不碰代码就能拿到 trace
-- [ ] LangSmith 和 Langfuse trace 导出的导入器
-- [ ] Python 录制器
-- [ ] `whatbroke watch`，迭代时自动对比基线
+- [x] LangSmith 和 Langfuse trace 导出的导入器
+- [x] Python 录制器
+- [x] `whatbroke watch`，迭代时自动对比基线
 - [ ] 语义输出对比（可选启用，自带 key）
 
 欢迎 issue 和 PR。如果 whatbroke 帮你抓到了 Agent 里悄悄坏掉的东西，我真的很想听听。

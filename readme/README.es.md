@@ -164,9 +164,9 @@ Determinista, offline, sin claves de API, sin cuentas. Tus trazas nunca salen de
 
 - [x] Ejecuciones multi-muestra, para que el comportamiento inestable aparezca como una tasa y no como ruido
 - [x] Captura por proxy (`whatbroke record`), trazas sin tocar tu código
-- [ ] Importadores para exportaciones de trazas de LangSmith y Langfuse
-- [ ] Grabador para Python
-- [ ] `whatbroke watch` para comparar contra una línea base mientras iteras
+- [x] Importadores para exportaciones de trazas de LangSmith y Langfuse
+- [x] Grabador para Python
+- [x] `whatbroke watch` para comparar contra una línea base mientras iteras
 - [ ] Comparación semántica de salidas (opcional, con tu propia clave)
 
 Issues y PRs bienvenidos. Si whatbroke pilló algo rompiéndose en silencio en tu agente, me encantaría saberlo.

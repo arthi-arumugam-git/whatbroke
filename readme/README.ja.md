@@ -164,9 +164,9 @@ whatbroke record --out <trace.jsonl>
 
 - [x] マルチサンプル実行。不安定な振る舞いをノイズではなく出現率として表示
 - [x] プロキシ記録 (`whatbroke record`)。コードに触れずにtraceを取得
-- [ ] LangSmithとLangfuseのtraceエクスポートのインポーター
-- [ ] Python版レコーダー
-- [ ] `whatbroke watch`。イテレーション中にベースラインと自動diff
+- [x] LangSmithとLangfuseのtraceエクスポートのインポーター
+- [x] Python版レコーダー
+- [x] `whatbroke watch`。イテレーション中にベースラインと自動diff
 - [ ] セマンティックな出力比較 (オプトイン、自分のキーを使用)
 
 IssueもPRも歓迎です。whatbrokeがあなたのエージェントの静かな故障を捕まえたなら、ぜひ聞かせてください。

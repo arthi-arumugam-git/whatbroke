@@ -164,9 +164,9 @@ Determinístico, offline, sem chave de API, sem conta. Seus traces nunca saem da
 
 - [x] Execuções multi-amostra, para comportamento instável aparecer como taxa em vez de ruído
 - [x] Captura por proxy (`whatbroke record`), traces sem tocar no seu código
-- [ ] Importadores para exports de trace do LangSmith e do Langfuse
-- [ ] Gravador em Python
-- [ ] `whatbroke watch` para comparar com uma linha de base enquanto você itera
+- [x] Importadores para exports de trace do LangSmith e do Langfuse
+- [x] Gravador em Python
+- [x] `whatbroke watch` para comparar com uma linha de base enquanto você itera
 - [ ] Comparação semântica de saídas (opt-in, com sua própria chave)
 
 Issues e PRs são bem-vindos. Se o whatbroke pegou algo quebrando em silêncio no seu agente, eu adoraria saber.

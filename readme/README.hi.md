@@ -164,9 +164,9 @@ Deterministic, offline, न API key चाहिए, न कोई खाता�
 
 - [x] मल्टी-सैंपल रन, ताकि अस्थिर व्यवहार शोर के बजाय दर के रूप में दिखे
 - [x] proxy से रिकॉर्डिंग (`whatbroke record`), कोड छुए बिना trace
-- [ ] LangSmith और Langfuse के trace export के लिए importer
-- [ ] Python recorder
-- [ ] `whatbroke watch`, काम करते-करते baseline से अपने आप diff
+- [x] LangSmith और Langfuse के trace export के लिए importer
+- [x] Python recorder
+- [x] `whatbroke watch`, काम करते-करते baseline से अपने आप diff
 - [ ] semantic आउटपुट तुलना (opt-in, अपनी key के साथ)
 
 Issue और PR का स्वागत है। अगर whatbroke ने आपके एजेंट में चुपचाप टूटी कोई चीज़ पकड़ी हो, तो मुझे सच में जानना अच्छा लगेगा।
